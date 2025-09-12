@@ -268,7 +268,8 @@ def get_variable_mappings():
             'fips': 'fips',
             'statefip': 'statefip',
             'counfip': 'counfip',
-            'gov_payments_avg': 'item040012'  # Gov payments-Total received average per farm (dollars), 1992
+            'gov_payments_avg': 'item040012',  # Gov payments-Total received average per farm (dollars), 1992
+            'corn_for_grain_acres': 'item010058'
         },
         1997: {
             'name': 'name',
@@ -276,7 +277,8 @@ def get_variable_mappings():
             'fips': 'fips', 
             'statefip': 'statefip',
             'counfip': 'counfip',
-            'gov_payments_avg': 'item04012'  # Government payments, total received, average per farm ($), 1997
+            'gov_payments_avg': 'item04012',  # Government payments, total received, average per farm ($), 1997
+            'corn_for_grain_acres': 'item01059'
         },
         2002: {
             'name': 'name',
@@ -284,7 +286,8 @@ def get_variable_mappings():
             'fips': 'fips',
             'statefip': 'statefip', 
             'counfip': 'counfip',
-            'gov_payments_avg': 'item05005'  # Government payments, Total received, Average per farm (dollars, 2002)
+            'gov_payments_avg': 'item05005',  # Government payments, Total received, Average per farm (dollars, 2002)
+            'corn_for_grain_acres': 'item01063'
         },
         2007: {
             'name': 'name',
@@ -292,7 +295,8 @@ def get_variable_mappings():
             'fips': 'fips',
             'statefip': 'statefip',
             'counfip': 'countyfip',  # Note: different column name in 2007
-            'gov_payments_avg': 'data5_5'  # Government payments\Total received\Average per farm (dollars, 2007)
+            'gov_payments_avg': 'data5_5',  # Government payments\Total received\Average per farm (dollars, 2007)
+            'corn_for_grain_acres': 'data1_63'
         },
         2012: {
             'name': 'name',
@@ -300,7 +304,8 @@ def get_variable_mappings():
             'fips': 'fips',
             'statefip': 'statefip',
             'counfip': 'cofips',  # Note: different column name in 2012
-            'gov_payments_avg': 'data5_5'  # Government payments\Total received\average per farm ($, 2012)
+            'gov_payments_avg': 'data5_5',  # Government payments\Total received\average per farm ($, 2012)
+            'corn_for_grain_acres': 'data1_64'
         }
     }
 
@@ -482,7 +487,6 @@ def print_summary(collected_files, missing_files):
             print(f"\n✓ Created merged dataset:")
             print(f"  {merged_file['rows']} total rows, {merged_file['columns']} columns")
             print(f"  → {merged_file['destination']}")
-            print(f"  Variables: year, name, level, fips, statefip, counfip, gov_payments_avg")
     
     if missing_files:
         print(f"\n✗ {len(missing_files)} files could not be processed:")

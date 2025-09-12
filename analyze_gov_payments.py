@@ -35,143 +35,265 @@ def load_merged_data():
         return None
 
 def filter_us_data(df):
-    """Filter data for United States level (level==3 or name==UNITED STATES)."""
+    """Filter data for United States level (level==3)."""
     logger.info("Filtering for United States data...")
     
     # Check what values are in the level and name columns
     logger.info(f"Unique values in 'level' column: {df['level'].unique()}")
-    logger.info(f"Unique values in 'name' column: {df['name'].unique()}")
+    logger.info(f"Sample of name values: {df['name'].unique()[:10]}")
     
-    # Filter for US data using both criteria
-    us_data = df[
-        (df['level'] == 3) | 
-        (df['name'].str.contains('UNITED STATES', case=False, na=False))
-    ].copy()
+    # First try filtering by level==3
+    us_data = df[df['level'] == 3].copy()
     
-    logger.info(f"Found {len(us_data)} US-level records")
+    logger.info(f"Found {len(us_data)} records with level==3")
+    
+    # If no level==3 data, try alternative approaches
+    if len(us_data) == 0:
+        logger.warning("No level==3 data found. Trying alternative filters...")
+        
+        # Try different level values that might represent US
+        for level_val in [1, 2, 3, '3', 'USA', 'US']:
+            test_data = df[df['level'] == level_val]
+            if len(test_data) > 0:
+                logger.info(f"Found {len(test_data)} records with level=={level_val}")
+                logger.info(f"Sample names: {test_data['name'].unique()[:5]}")
+        
+        # Try name-based filtering as fallback
+        us_data = df[df['name'].str.contains('UNITED STATES|USA|US', case=False, na=False)].copy()
+        logger.info(f"Found {len(us_data)} records with US-related names")
     
     if len(us_data) == 0:
-        logger.warning("No US-level data found. Checking all records...")
-        logger.info("Sample of data:")
-        print(df[['year', 'name', 'level', 'gov_payments_avg']].head(10))
+        logger.error("No US-level data found. Showing sample of all data:")
+        print("\nSample of all data:")
+        print(df[['year', 'name', 'level', 'gov_payments_avg']].head(20))
+        print(f"\nLevel value counts:")
+        print(df['level'].value_counts())
         return None
+    
+    # Show what we found
+    logger.info(f"Selected US data:")
+    print(us_data[['year', 'name', 'level', 'gov_payments_avg']].to_string())
     
     return us_data
 
-def pivot_to_wide_format(df):
-    """Pivot the data from long to wide format."""
-    logger.info("Pivoting data to wide format...")
+def filter_corn_counties(df):
+    """Filter data to only include counties that grew corn (> 0 acres)."""
+    logger.info("Filtering for counties that grew corn...")
     
-    # Create a pivot table with years as columns
-    pivot_df = df.pivot_table(
-        index=['name', 'level', 'fips', 'statefip', 'counfip'],
-        columns='year',
-        values='gov_payments_avg',
-        aggfunc='mean'  # In case there are duplicates
-    ).reset_index()
+    # Check if corn_for_grain_acres column exists
+    if 'corn_for_grain_acres' not in df.columns:
+        logger.error("corn_for_grain_acres column not found in data")
+        return None
     
-    # Flatten column names
-    pivot_df.columns.name = None
+    # Convert corn acres to numeric, handling any non-numeric values
+    df['corn_for_grain_acres'] = pd.to_numeric(df['corn_for_grain_acres'], errors='coerce')
     
-    logger.info(f"Pivoted data shape: {pivot_df.shape}")
-    logger.info(f"Columns: {list(pivot_df.columns)}")
+    # Filter for county-level data (level==1) with corn acres > 0
+    corn_counties = df[(df['level'] == 1) & (df['corn_for_grain_acres'] > 0)].copy()
     
-    return pivot_df
+    logger.info(f"Found {len(corn_counties)} county records with corn acres > 0")
+    logger.info(f"Original data: {len(df)} records")
+    logger.info(f"Corn counties data: {len(corn_counties)} records")
+    
+    # Show sample of corn counties data
+    if len(corn_counties) > 0:
+        logger.info("Sample of corn counties data:")
+        print(corn_counties[['year', 'name', 'level', 'gov_payments_avg', 'corn_for_grain_acres']].head(10))
+    
+    return corn_counties
 
-def create_time_series_plot(df, pivot_df):
+def create_time_series_plot(us_data, corn_counties_data):
     """Create a time series plot of government payments over time."""
     logger.info("Creating time series plot...")
+    
+    # Simply extract years and values from the long format data
+    years = sorted([int(year) for year in us_data['year'].unique()])
+    
+    # Extract US-wide government payments
+    us_gov_payments = []
+    for year in years:
+        year_data = us_data[us_data['year'] == year]
+        if len(year_data) > 0:
+            gov_value = year_data['gov_payments_avg'].iloc[0]
+            us_gov_payments.append(gov_value)
+            logger.info(f"Year {year} (US): Gov Payments ${gov_value}")
+        else:
+            us_gov_payments.append(np.nan)
+            logger.info(f"Year {year} (US): No data found")
+    
+    # Extract corn counties government payments (average across counties)
+    corn_gov_payments = []
+    corn_acres = []
+    
+    for year in years:
+        if corn_counties_data is not None:
+            year_data = corn_counties_data[corn_counties_data['year'] == year]
+            if len(year_data) > 0:
+                # Calculate average government payments across all corn counties for this year
+                avg_gov_value = year_data['gov_payments_avg'].mean()
+                total_corn_acres = year_data['corn_for_grain_acres'].sum() if 'corn_for_grain_acres' in year_data.columns else np.nan
+                corn_gov_payments.append(avg_gov_value)
+                corn_acres.append(total_corn_acres)
+                logger.info(f"Year {year} (Corn Counties): Avg Gov Payments ${avg_gov_value:.0f}, Total Corn Acres {total_corn_acres:,.0f}")
+            else:
+                corn_gov_payments.append(np.nan)
+                corn_acres.append(np.nan)
+                logger.info(f"Year {year} (Corn Counties): No data found")
+        else:
+            corn_gov_payments.append(np.nan)
+            corn_acres.append(np.nan)
     
     # Set up the plot style
     plt.style.use('seaborn-v0_8')
     fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(12, 10))
     
-    # Plot 1: Time series of government payments
-    years = sorted([col for col in pivot_df.columns if isinstance(col, (int, float)) and 1990 <= col <= 2020])
-    gov_payments = [pivot_df[year].iloc[0] if year in pivot_df.columns else np.nan for year in years]
+    # Plot 1: Time series of government payments - both US and corn counties
+    ax1.plot(years, us_gov_payments, marker='o', linewidth=2, markersize=8, color='#2E86AB', label='Entire US')
+    ax1.plot(years, corn_gov_payments, marker='s', linewidth=2, markersize=8, color='#A23B72', label='Corn Counties Only')
     
-    ax1.plot(years, gov_payments, marker='o', linewidth=2, markersize=8, color='#2E86AB')
-    ax1.set_title('Average Government Payments per Farm in the United States\nAgricultural Census 1992-2012', 
+    # Add vertical lines for farm bills
+    farm_bill_years = [1996, 2002, 2008, 2014, 2018]
+    farm_bill_labels = ['1996 Farm Bill', '2002 Farm Bill', '2008 Farm Bill', '2014 Farm Bill', '2018 Farm Bill']
+    
+    for i, (year, label) in enumerate(zip(farm_bill_years, farm_bill_labels)):
+        if year >= min(years) and year <= max(years):
+            ax1.axvline(x=year, color='gray', linestyle='--', alpha=0.7, linewidth=1.5)
+            # Add label with slight offset to avoid overlap
+            ax1.text(year, ax1.get_ylim()[1] * (0.95 - i * 0.05), label, 
+                    rotation=90, verticalalignment='top', horizontalalignment='right',
+                    fontsize=9, alpha=0.8, color='gray')
+    
+    ax1.set_title('Average Government Payments per Farm\nAgricultural Census 1992-2012', 
                   fontsize=14, fontweight='bold')
     ax1.set_xlabel('Census Year', fontsize=12)
     ax1.set_ylabel('Average Government Payments per Farm ($)', fontsize=12)
     ax1.grid(True, alpha=0.3)
     ax1.set_xticks(years)
+    ax1.legend()
+    
+    # Add value labels on points for US data
+    for i, (year, value) in enumerate(zip(years, us_gov_payments)):
+        if not pd.isna(value):
+            ax1.annotate(f'${value:.0f}', 
+                        (year, value), 
+                        textcoords="offset points", 
+                        xytext=(0,10), 
+                        ha='center',
+                        fontsize=9)
+    
+    # Add value labels on points for corn counties data
+    for i, (year, value) in enumerate(zip(years, corn_gov_payments)):
+        if not pd.isna(value):
+            ax1.annotate(f'${value:.0f}', 
+                        (year, value), 
+                        textcoords="offset points", 
+                        xytext=(0,-15), 
+                        ha='center',
+                        fontsize=9)
+    
+    # Plot 2: Corn acres over time
+    ax2.plot(years, corn_acres, marker='s', linewidth=2, markersize=8, color='#A23B72')
+    ax2.set_title('Total Corn for Grain Acres in the United States\nAgricultural Census 1992-2012', 
+                  fontsize=14, fontweight='bold')
+    ax2.set_xlabel('Census Year', fontsize=12)
+    ax2.set_ylabel('Total Corn for Grain Acres', fontsize=12)
+    ax2.grid(True, alpha=0.3)
+    ax2.set_xticks(years)
     
     # Add value labels on points
-    for i, (year, value) in enumerate(zip(years, gov_payments)):
+    for i, (year, value) in enumerate(zip(years, corn_acres)):
         if not pd.isna(value):
-            ax1.annotate(f'${value:,.0f}', 
+            ax2.annotate(f'{value:,.0f}', 
                         (year, value), 
                         textcoords="offset points", 
                         xytext=(0,10), 
                         ha='center',
                         fontsize=10)
     
-    # Plot 2: Bar chart for better comparison
-    ax2.bar(years, gov_payments, color='#A23B72', alpha=0.7, edgecolor='black', linewidth=0.5)
-    ax2.set_title('Government Payments per Farm by Census Year', fontsize=14, fontweight='bold')
-    ax2.set_xlabel('Census Year', fontsize=12)
-    ax2.set_ylabel('Average Government Payments per Farm ($)', fontsize=12)
-    ax2.grid(True, alpha=0.3, axis='y')
-    ax2.set_xticks(years)
-    
-    # Add value labels on bars
-    for i, (year, value) in enumerate(zip(years, gov_payments)):
-        if not pd.isna(value):
-            ax2.text(year, value + max(gov_payments) * 0.01, f'${value:,.0f}', 
-                    ha='center', va='bottom', fontsize=10, fontweight='bold')
-    
     plt.tight_layout()
     
     # Save the plot
     output_dir = Path("/Users/anyamarchenko/Documents/GitHub/corn/output/figs")
+    output_dir.mkdir(parents=True, exist_ok=True)
     plot_path = output_dir / "government_payments_timeseries.png"
     plt.savefig(plot_path, dpi=300, bbox_inches='tight')
     logger.info(f"Plot saved to: {plot_path}")
     
     plt.show()
     
-    return years, gov_payments
+    return years, us_gov_payments, corn_gov_payments, corn_acres
 
 
 
-def main():
-    """Main function to run the analysis."""
-    logger.info("Starting government payments analysis...")
-    
-    # Load the merged data
-    df = load_merged_data()
-    if df is None:
-        return
-    
-    # Filter for US data
-    us_data = filter_us_data(df)
-    if us_data is None:
-        logger.error("Could not find US-level data. Exiting.")
-        return
-    
-    # Pivot to wide format
-    pivot_df = pivot_to_wide_format(us_data)
-    
-    # Create visualizations
-    years, gov_payments = create_time_series_plot(us_data, pivot_df)
-        
-    # Additional analysis
-    logger.info("\nAdditional Analysis:")
-    logger.info(f"Years with data: {[year for year, value in zip(years, gov_payments) if not pd.isna(value)]}")
-    logger.info(f"Years missing data: {[year for year, value in zip(years, gov_payments) if pd.isna(value)]}")
-    
-    if len([v for v in gov_payments if not pd.isna(v)]) > 1:
-        # Calculate percentage change
-        valid_values = [(year, value) for year, value in zip(years, gov_payments) if not pd.isna(value)]
-        if len(valid_values) >= 2:
-            first_year, first_value = valid_values[0]
-            last_year, last_value = valid_values[-1]
-            pct_change = ((last_value - first_value) / first_value) * 100
-            logger.info(f"Change from {first_year} to {last_year}: {pct_change:.1f}%")
-    
-    logger.info("Analysis completed successfully!")
+logger.info("Starting government payments analysis...")
 
-if __name__ == "__main__":
-    main()
+# Load the merged data
+df = load_merged_data()
+
+
+# After loading df in load_merged_data(), immediately normalize types
+df['year'] = pd.to_numeric(df['year'], errors='coerce').astype('Int64')
+
+# Strip $, commas, and any stray characters, then to float
+df['gov_payments_avg'] = (
+    df['gov_payments_avg']
+      .astype(str)
+      .str.replace(r'[^\d\.\-]', '', regex=True)  # remove $ , spaces, etc.
+      .replace('', np.nan)
+      .astype(float)
+)
+
+# Filter for US data
+us_data = filter_us_data(df)
+
+# Filter for counties that grew corn (from original data, not US-level data)
+corn_counties_data = filter_corn_counties(df)
+
+# Create visualizations directly from the long format data
+# Pass both US data and corn counties data to the plotting function
+years, us_gov_payments, corn_gov_payments, corn_acres = create_time_series_plot(us_data, corn_counties_data)
+
+# Additional analysis
+logger.info("\nAdditional Analysis:")
+
+# Show the actual data we're working with
+logger.info(f"US-wide government payments by year:")
+for year, value in zip(years, us_gov_payments):
+    if not pd.isna(value):
+        logger.info(f"  {year}: ${value:,.0f}")
+    else:
+        logger.info(f"  {year}: Missing")
+
+logger.info(f"Corn counties government payments by year:")
+for year, value in zip(years, corn_gov_payments):
+    if not pd.isna(value):
+        logger.info(f"  {year}: ${value:,.0f}")
+    else:
+        logger.info(f"  {year}: Missing")
+
+logger.info(f"Total corn acres by year:")
+for year, value in zip(years, corn_acres):
+    if not pd.isna(value):
+        logger.info(f"  {year}: {value:,.0f} acres")
+    else:
+        logger.info(f"  {year}: Missing")
+
+# Calculate percentage changes for both US and corn counties
+if len([v for v in us_gov_payments if not pd.isna(v)]) > 1:
+    valid_values = [(year, value) for year, value in zip(years, us_gov_payments) if not pd.isna(value)]
+    if len(valid_values) >= 2:
+        first_year, first_value = valid_values[0]
+        last_year, last_value = valid_values[-1]
+        pct_change = ((last_value - first_value) / first_value) * 100
+        logger.info(f"US-wide change from {first_year} to {last_year}: {pct_change:.1f}%")
+
+if len([v for v in corn_gov_payments if not pd.isna(v)]) > 1:
+    valid_values = [(year, value) for year, value in zip(years, corn_gov_payments) if not pd.isna(value)]
+    if len(valid_values) >= 2:
+        first_year, first_value = valid_values[0]
+        last_year, last_value = valid_values[-1]
+        pct_change = ((last_value - first_value) / first_value) * 100
+        logger.info(f"Corn counties change from {first_year} to {last_year}: {pct_change:.1f}%")
+
+logger.info("Analysis completed successfully!")
+
