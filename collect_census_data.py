@@ -259,82 +259,66 @@ from pathlib import Path
 import logging
 import numpy as np
 
-# Set up logging
+# -----------------------------------
+# Logging
+# -----------------------------------
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
+# -----------------------------------
+# Config
+# -----------------------------------
 
-# Choose which columns to deflate to real dollars 
+# Choose which columns to deflate to real dollars
 DEFLATABLE_COLS = ['gov_payments_avg']
 
-# Additional census files (2017-2022 NASS format)
+# NASS files (2017–2022)
 NASS_2017_FILE = "/Users/anyamarchenko/CEGA Dropbox/Anya Marchenko/corn/raw/NASS_2017-2022/qs.census2017.txt"
 NASS_2022_FILE = "/Users/anyamarchenko/CEGA Dropbox/Anya Marchenko/corn/raw/NASS_2017-2022/qs.census2022.txt"
 
-# Variable mapping configuration
-# Define which variables to extract and their locations in each data source
+# Variable mapping (ICPSR columns and the matching NASS short_desc)
 VARIABLE_MAPPING = {
     'gov_payments_avg': {
         'icpsr_columns': {
-            1992: 'item040012',  # Gov payments-Total received average per farm (dollars), 1992
-            1997: 'item04012',   # Government payments, total received, average per farm ($), 1997
-            2002: 'item05005',   # Government payments, Total received, Average per farm (dollars, 2002)
-            2007: 'data5_5',     # Government payments\Total received\Average per farm (dollars, 2007)
-            2012: 'data5_5',     # Government payments\Total received\average per farm ($, 2012)
+            1992: 'item040012',
+            1997: 'item04012',
+            2002: 'item05005',
+            2007: 'data5_5',
+            2012: 'data5_5',
         },
         'nass_short_desc': 'GOVT PROGRAMS, FEDERAL - RECEIPTS, MEASURED IN $ / OPERATION',
         'description': 'Government payments average per farm'
     },
     'corn_for_grain_acres': {
         'icpsr_columns': {
-            1992: 'item010058',  # Corn for grain or seed (acres), 1992
-            1997: 'item01059',   # Corn for grain or seed (acres), 1997
-            2002: 'item01063',   # Selected crops harvested, Corn for grain (acres, 2002)
-            2007: 'data1_63',    # Selected crops harvested\Corn for grain (acres)
-            2012: 'data1_64',    # Selected crops harvested\Corn for grain (acres)
+            1992: 'item010058',
+            1997: 'item01059',
+            2002: 'item01063',
+            2007: 'data1_63',
+            2012: 'data1_64',
         },
         'nass_short_desc': 'CORN, GRAIN - ACRES HARVESTED',
         'description': 'Corn for grain acres harvested'
     }
-    # Add more variables here as needed
-    # 'market_value_avg': {
-    #     'icpsr_columns': {
-    #         1992: 'item010034',  # Net cash return from agricultural sales for the farm unit
-    #         # ... etc
-    #     },
-    #     'nass_short_desc': 'MARKET VALUE OF AGRICULTURAL PRODUCTS SOLD - RECEIPTS, MEASURED IN $ / OPERATION',
-    #     'description': 'Market value of agricultural products sold per farm'
-    # }
 }
 
-
+# -----------------------------------
+# Helpers
+# -----------------------------------
 
 def setup_directories():
     """Create interim directory structure if it doesn't exist."""
     interim_dir = Path("/Users/anyamarchenko/CEGA Dropbox/Anya Marchenko/corn/interim")
     interim_dir.mkdir(exist_ok=True)
-    
-    # Create year subdirectories for all census years
-    years = [1992, 1997, 2002, 2007, 2012, 2017, 2022]
-    for year in years:
-        year_dir = interim_dir / str(year)
-        year_dir.mkdir(exist_ok=True)
-        logger.info(f"Created directory: {year_dir}")
-    
+    for year in [1992, 1997, 2002, 2007, 2012, 2017, 2022]:
+        (interim_dir / str(year)).mkdir(exist_ok=True)
     return interim_dir
-    
 
 def load_nass_census_data(file_path, year):
-    """Load NASS census data and explore government payment descriptions."""
-    logger.info(f"Loading NASS census data for {year} from {file_path}")
-    
+    """Load NASS census data TSV."""
     try:
-        # Load the data
         df = pd.read_csv(file_path, sep='\t', low_memory=False)
-        logger.info(f"Loaded NASS {year} data: {len(df)} rows, {len(df.columns)} columns")
-        
         return df
-        
     except Exception as e:
         logger.error(f"Error loading NASS {year} data: {e}")
         return None
@@ -343,7 +327,7 @@ def process_nass_census_data(df, year):
     """
     Minimal processor for NASS 2017/2022:
       - DOMAIN_DESC == 'TOTAL' only
-      - exact SHORT_DESC match using VARIABLE_MAPPING[var]['nass_short_desc']
+      - exact SHORT_DESC match using VARIABLE_MAPPING[var]['nass_short_desc'] (case/space-normalized)
       - cleans VALUE: (D)/(H)/(NA)/(Z) -> NaN; remove $ and commas
       - maps by level to columns named by VARIABLE_MAPPING keys
     """
@@ -359,14 +343,12 @@ def process_nass_census_data(df, year):
         s = s.str.replace(r'[\$,]', '', regex=True)
         return pd.to_numeric(s, errors='coerce')
 
-    # normalize a few text cols used below (only if present)
-    for col in ['AGG_LEVEL_DESC','SHORT_DESC','DOMAIN_DESC',
-                'STATE_NAME','COUNTY_NAME','COUNTRY_NAME',
-                'UNIT_DESC']:
+    # normalize needed text cols (if present)
+    for col in ['AGG_LEVEL_DESC','SHORT_DESC','DOMAIN_DESC','STATE_NAME','COUNTY_NAME','COUNTRY_NAME','UNIT_DESC']:
         if col in df.columns:
             df[col] = norm(df[col])
 
-    # zero-pad FIPS used in keys
+    # zero-pad FIPS for consistent keys
     if 'STATE_FIPS_CODE' in df.columns:
         df['STATE_FIPS_CODE'] = df['STATE_FIPS_CODE'].astype(str).str.zfill(2)
     if 'COUNTY_CODE' in df.columns:
@@ -376,7 +358,7 @@ def process_nass_census_data(df, year):
     if 'DOMAIN_DESC' in df.columns:
         df = df[df['DOMAIN_DESC'] == 'TOTAL'].copy()
 
-    # 2) limit to levels we support
+    # 2) keep only supported levels
     level_map = {'COUNTY': 1, 'STATE': 2, 'NATIONAL': 3}
     df = df[df['AGG_LEVEL_DESC'].isin(level_map.keys())].copy()
     df['level'] = df['AGG_LEVEL_DESC'].map(level_map)
@@ -388,7 +370,7 @@ def process_nass_census_data(df, year):
         if sub.empty:
             continue
 
-        # base geography frame
+        # base geography
         if lvl_name == 'COUNTY':
             base = (sub[['YEAR','COUNTY_NAME','STATE_FIPS_CODE','COUNTY_CODE','level']]
                     .drop_duplicates()
@@ -412,7 +394,7 @@ def process_nass_census_data(df, year):
             make_bkey = lambda b: b['name']
             make_key  = lambda d: d['COUNTRY_NAME']
 
-        # for each requested variable, match by SHORT_DESC and map into base
+        # for each requested variable, map by exact (normalized) SHORT_DESC
         for var_name, cfg in VARIABLE_MAPPING.items():
             short = cfg.get('nass_short_desc')
             if not short:
@@ -445,28 +427,18 @@ def process_nass_census_data(df, year):
         result = result[keep_cols]
     return result
 
-
 def load_deflator_data():
-    """Load the price deflator data."""
+    """Load the BEA price deflator (A191RG) and return year + price_deflator."""
     deflator_path = Path("/Users/anyamarchenko/CEGA Dropbox/Anya Marchenko/corn/raw/deflator/price_index_A191RG_BEA.csv")
-    
     if not deflator_path.exists():
         logger.error(f"Deflator file not found: {deflator_path}")
         return None
-    
     try:
         deflator_df = pd.read_csv(deflator_path)
         logger.info(f"Loaded deflator data: {len(deflator_df)} rows")
-        
-        # Extract year from observation_date
         deflator_df['year'] = pd.to_datetime(deflator_df['observation_date']).dt.year
-        
-        # Rename the deflator column for clarity
         deflator_df = deflator_df.rename(columns={'A191RG3A086NBEA': 'price_deflator'})
-        
-        # Keep only year and deflator columns
         deflator_df = deflator_df[['year', 'price_deflator']].copy()
-        
         logger.info(f"Deflator data years: {deflator_df['year'].min()} to {deflator_df['year'].max()}")
         return deflator_df
     except Exception as e:
@@ -474,59 +446,37 @@ def load_deflator_data():
         return None
 
 def deflate_columns(df, deflator_df, DEFLATABLE_COLS):
-    """Deflate specified columns using the price deflator."""
+    """Deflate specified columns using the price deflator (2017=100)."""
     logger.info("Deflating monetary columns to 2017 dollars...")
-    
-    # Merge the deflator data with the main dataframe
     df_with_deflator = df.merge(deflator_df, on='year', how='left')
-    
-    # Check if we have deflator data for all years
+
+    # warn if missing deflator
     missing_deflator = df_with_deflator['price_deflator'].isna().sum()
     if missing_deflator > 0:
         logger.warning(f"Missing deflator data for {missing_deflator} records")
         missing_years = df_with_deflator[df_with_deflator['price_deflator'].isna()]['year'].unique()
         logger.info(f"Missing years: {missing_years}")
-    
-    # Deflate each specified column
+
+    # compute real columns
     for col in DEFLATABLE_COLS:
         if col in df_with_deflator.columns:
-            # Clean the column data first (remove $, commas, etc.)
             df_with_deflator[col] = (
                 df_with_deflator[col]
                 .astype(str)
-                .str.replace(r'[^\d\.\-]', '', regex=True)  # remove $ , spaces, etc.
+                .str.replace(r'[^\d\.\-]', '', regex=True)
                 .replace('', np.nan)
                 .astype(float)
             )
-            
-            # Create deflated column name
-            real_col_name = f"{col}_real"
-            
-            # Calculate real values (in 2017 dollars)
-            # Formula: real_value = nominal_value * (100 / deflator_value)
-            df_with_deflator[real_col_name] = (
-                df_with_deflator[col] * 
-                (100 / df_with_deflator['price_deflator'])
-            )
-            
-            logger.info(f"Created deflated column: {real_col_name}")
+            real_col = f"{col}_real"
+            df_with_deflator[real_col] = df_with_deflator[col] * (100 / df_with_deflator['price_deflator'])
+            logger.info(f"Created deflated column: {real_col}")
         else:
             logger.warning(f"Column {col} not found in data, skipping deflation")
-    
-    logger.info("Deflation completed. Added real dollar columns (2017 base year).")
-    
-    # Show some examples of the deflation
-    sample_cols = ['year'] + [col for col in DEFLATABLE_COLS if col in df_with_deflator.columns] + [f"{col}_real" for col in DEFLATABLE_COLS if col in df_with_deflator.columns]
-    sample_data = df_with_deflator[sample_cols].dropna().head()
-    if len(sample_data) > 0:
-        logger.info("Sample of deflated data:")
-        logger.info(sample_data.to_string())
-    
+
     return df_with_deflator
 
 def get_icpsr_variable_mapping(year):
-    """Get variable mapping for ICPSR data for a specific year."""
-    # Base mapping for all years
+    """Get column mapping for ICPSR files for a given year."""
     base_mapping = {
         'name': 'name',
         'level': 'level',
@@ -534,195 +484,132 @@ def get_icpsr_variable_mapping(year):
         'statefip': 'statefip',
         'counfip': 'counfip'
     }
-    
-    # Add variable-specific columns for this year
     for var_name, var_config in VARIABLE_MAPPING.items():
         if year in var_config['icpsr_columns']:
             base_mapping[var_name] = var_config['icpsr_columns'][year]
-    
-    # Handle special cases for different years
     if year == 2007:
         base_mapping['counfip'] = 'countyfip'
     elif year == 2012:
         base_mapping['counfip'] = 'cofips'
-    
     return base_mapping
 
 def filter_and_process_data(file_path, year, variable_mapping):
-    """Filter data to keep only specified variables and add year column."""
+    """Select variables by mapping and attach year column (ICPSR files)."""
     try:
-        # Read the TSV file
         df = pd.read_csv(file_path, sep='\t', low_memory=False)
         logger.info(f"Loaded {len(df)} rows from {file_path}")
-        
-        # Create case-insensitive column mapping
         df_columns_lower = {col.lower(): col for col in df.columns}
-        logger.info(f"Available columns in {year}: {list(df.columns)[:10]}...")  # Show first 10 columns
-        
-        # Select only the variables we need (case-insensitive)
         required_vars = list(variable_mapping.values())
-        available_vars = []
-        missing_vars = []
-        
+        available_vars, missing_vars = [], []
+
         for var in required_vars:
             var_lower = var.lower()
             if var_lower in df_columns_lower:
-                actual_col_name = df_columns_lower[var_lower]
-                available_vars.append(actual_col_name)
+                available_vars.append(df_columns_lower[var_lower])
             else:
                 missing_vars.append(var)
-        
+
         if missing_vars:
             logger.warning(f"Missing variables in {year}: {missing_vars}")
-            logger.info(f"Looking for columns containing 'item' or 'data': {[col for col in df.columns if 'item' in col.lower() or 'data' in col.lower()][:10]}")
-        
+            logger.info("Examples of columns with 'item'/'data': " +
+                        str([c for c in df.columns if 'item' in c.lower() or 'data' in c.lower()][:10]))
+
         if not available_vars:
             logger.error(f"No required variables found in {year}")
             return None
-        
-        # Filter dataframe to only include available variables
+
         df_filtered = df[available_vars].copy()
-        
-        # Create mapping from actual column names to our standard names
+
         actual_to_standard = {}
         for standard_name, original_var in variable_mapping.items():
             original_var_lower = original_var.lower()
             if original_var_lower in df_columns_lower:
-                actual_col_name = df_columns_lower[original_var_lower]
-                actual_to_standard[actual_col_name] = standard_name
-        
-        # Rename columns to consistent names
+                actual_to_standard[df_columns_lower[original_var_lower]] = standard_name
+
         df_filtered = df_filtered.rename(columns=actual_to_standard)
-        
-        # Add year column
         df_filtered['year'] = year
-        
-        # Reorder columns to have year first
-        cols = ['year'] + [col for col in df_filtered.columns if col != 'year']
+        cols = ['year'] + [c for c in df_filtered.columns if c != 'year']
         df_filtered = df_filtered[cols]
-        
         logger.info(f"Filtered to {len(df_filtered)} rows with {len(df_filtered.columns)} columns")
         return df_filtered
-        
     except Exception as e:
         logger.error(f"Error processing {file_path}: {e}")
         return None
 
 def collect_census_files():
-    """Collect census files from different years, filter variables, and create merged dataset."""
-    
-    # Define the base path and folder mappings
+    """Process ICPSR (1992–2012) files and write merged outputs for those years."""
     base_path = Path("/Users/anyamarchenko/CEGA Dropbox/Anya Marchenko/corn/raw/ICPSR_1850-2012")
-    
-    # Folder to year mapping
-    folder_year_mapping = {
-        "DS0042": 1992,
-        "DS0043": 1997,
-        "DS0044": 2002,
-        "DS0045": 2007,
-        "DS0047": 2012
-    }
-    
-    # Folder to file number mapping (for correct file naming)
-    folder_file_mapping = {
-        "DS0042": "0042",
-        "DS0043": "0043", 
-        "DS0044": "0044",
-        "DS0045": "0045",
-        "DS0047": "0047"
-    }
-        
-    # Load deflator data
+    folder_year_mapping = {"DS0042": 1992, "DS0043": 1997, "DS0044": 2002, "DS0045": 2007, "DS0047": 2012}
+    folder_file_mapping = {"DS0042": "0042", "DS0043": "0043", "DS0044": "0044", "DS0045": "0045", "DS0047": "0047"}
+
+    # deflator
     deflator_df = load_deflator_data()
     if deflator_df is None:
         logger.error("Failed to load deflator data. Exiting.")
         return [], [{'error': 'Failed to load deflator data'}]
-    
-    # Get list of columns to deflate
+
     logger.info(f"Columns to deflate: {DEFLATABLE_COLS}")
-    
-    # Set up interim directories
     interim_dir = setup_directories()
-    
-    collected_files = []
-    missing_files = []
-    processed_dataframes = []
-    
+
+    collected_files, missing_files, processed_dataframes = [], [], []
+
     for folder, year in folder_year_mapping.items():
         logger.info(f"Processing {folder} (Year: {year})")
-        
-        # Construct the source file path
         file_number = folder_file_mapping[folder]
         source_file = base_path / folder / f"35206-{file_number}-Data.tsv"
-        
-        if source_file.exists():
-            try:
-                # Get variable mapping for this year
-                variable_mapping = get_icpsr_variable_mapping(year)
-                
-                # Process and filter the data
-                df_filtered = filter_and_process_data(source_file, year, variable_mapping)
-                
-                if df_filtered is not None:
-                    # Save individual year file
-                    year_file = interim_dir / str(year) / f"census_{year}_filtered.tsv"
-                    df_filtered.to_csv(year_file, sep='\t', index=False)
-                    
-                    # Add to list for merging
-                    processed_dataframes.append(df_filtered)
-                    
-                    collected_files.append({
-                        'year': year,
-                        'folder': folder,
-                        'source': str(source_file),
-                        'destination': str(year_file),
-                        'rows': len(df_filtered),
-                        'columns': len(df_filtered.columns)
-                    })
-                    logger.info(f"✓ Processed {source_file.name} → {year_file.name} ({len(df_filtered)} rows, {len(df_filtered.columns)} cols)")
-                else:
-                    missing_files.append({'folder': folder, 'year': year, 'error': 'Failed to process data'})
-                    
-            except Exception as e:
-                logger.error(f"✗ Failed to process {source_file}: {e}")
-                missing_files.append({'folder': folder, 'year': year, 'error': str(e)})
-        else:
+
+        if not source_file.exists():
             logger.warning(f"✗ File not found: {source_file}")
             missing_files.append({'folder': folder, 'year': year, 'error': 'File not found'})
-    
-    # Create merged dataset
+            continue
+
+        try:
+            variable_mapping = get_icpsr_variable_mapping(year)
+            df_filtered = filter_and_process_data(source_file, year, variable_mapping)
+            if df_filtered is None:
+                missing_files.append({'folder': folder, 'year': year, 'error': 'Failed to process data'})
+                continue
+
+            year_file = interim_dir / str(year) / f"census_{year}_filtered.tsv"
+            df_filtered.to_csv(year_file, sep='\t', index=False)
+            processed_dataframes.append(df_filtered)
+
+            collected_files.append({
+                'year': year,
+                'folder': folder,
+                'source': str(source_file),
+                'destination': str(year_file),
+                'rows': len(df_filtered),
+                'columns': len(df_filtered.columns)
+            })
+            logger.info(f"✓ Processed {source_file.name} → {year_file.name} ({len(df_filtered)} rows, {len(df_filtered.columns)} cols)")
+        except Exception as e:
+            logger.error(f"✗ Failed to process {source_file}: {e}")
+            missing_files.append({'folder': folder, 'year': year, 'error': str(e)})
+
+    # Create merged datasets (1992–2012 only)
     if processed_dataframes:
-        logger.info("Creating merged dataset...")
+        logger.info("Creating merged dataset (1992–2012)...")
         merged_df = pd.concat(processed_dataframes, ignore_index=True)
-        
-        # Apply deflation to the merged dataset
-        logger.info("Applying deflation to merged dataset...")
+
         merged_df_deflated = deflate_columns(merged_df, deflator_df, DEFLATABLE_COLS)
-        
-        # Create final dataset with only deflated columns (plus essential identifiers)
+
+        # Deflated dataset: DO NOT include price_deflator
         essential_columns = ['year', 'name', 'level', 'fips', 'statefip', 'counfip', 'corn_for_grain_acres']
         real_columns = [f"{col}_real" for col in DEFLATABLE_COLS if f"{col}_real" in merged_df_deflated.columns]
-        
-        # Combine essential columns with deflated columns
-        final_columns = essential_columns + real_columns
-        available_final_columns = [col for col in final_columns if col in merged_df_deflated.columns]
-        
-        final_df = merged_df_deflated[available_final_columns].copy()
-        
-        # Save final dataset with deflated values
+        final_columns = [c for c in (essential_columns + real_columns) if c in merged_df_deflated.columns]
+        final_df = merged_df_deflated[final_columns].copy()
+        final_df = final_df.drop(columns=['price_deflator'], errors='ignore')  # ensure it's not there
+
         final_file = interim_dir / "census_merged_1992_2012_deflated.tsv"
         final_df.to_csv(final_file, sep='\t', index=False)
-        
         logger.info(f"✓ Created deflated merged dataset: {final_file} ({len(final_df)} rows, {len(final_df.columns)} cols)")
-        logger.info(f"Final columns: {list(final_df.columns)}")
-        
-        # Also save the full dataset with both nominal and real values for reference
+
+        # Full dataset: INCLUDE price_deflator
         full_file = interim_dir / "census_merged_1992_2012_full.tsv"
         merged_df_deflated.to_csv(full_file, sep='\t', index=False)
-        
-        logger.info(f"✓ Created full dataset (nominal + real): {full_file} ({len(merged_df_deflated)} rows, {len(merged_df_deflated.columns)} cols)")
-        
-        # Add merged file info
+        logger.info(f"✓ Created full dataset (nominal + real + deflator): {full_file} ({len(merged_df_deflated)} rows, {len(merged_df_deflated.columns)} cols)")
+
         collected_files.append({
             'year': 'merged_deflated',
             'folder': 'all',
@@ -731,7 +618,6 @@ def collect_census_files():
             'rows': len(final_df),
             'columns': len(final_df.columns)
         })
-        
         collected_files.append({
             'year': 'merged_full',
             'folder': 'all',
@@ -740,7 +626,7 @@ def collect_census_files():
             'rows': len(merged_df_deflated),
             'columns': len(merged_df_deflated.columns)
         })
-    
+
     return collected_files, missing_files
 
 def print_summary(collected_files, missing_files):
@@ -748,150 +634,133 @@ def print_summary(collected_files, missing_files):
     print("\n" + "="*80)
     print("AGRICULTURAL CENSUS DATA PROCESSING SUMMARY")
     print("="*80)
-    
+
     if collected_files:
         print(f"\n✓ Successfully processed {len([f for f in collected_files if f['year'] != 'merged'])} year files:")
-        total_rows = 0
         for file_info in collected_files:
             if file_info['year'] != 'merged':
                 print(f"  {file_info['year']}: {file_info['rows']} rows, {file_info['columns']} columns")
                 print(f"    → {file_info['destination']}")
-                total_rows += file_info['rows']
-        
-        # Show merged file info
+
         merged_files = [f for f in collected_files if f['year'] in ['merged_deflated', 'merged_full']]
         if merged_files:
             print(f"\n✓ Created merged datasets:")
-            for merged_file in merged_files:
-                file_type = "deflated (real dollars)" if merged_file['year'] == 'merged_deflated' else "full (nominal + real)"
-                print(f"  {file_type}: {merged_file['rows']} total rows, {merged_file['columns']} columns")
-                print(f"    → {merged_file['destination']}")
-    
+            for mf in merged_files:
+                file_type = "deflated (real dollars)" if mf['year'] == 'merged_deflated' else "full (nominal + real + deflator)"
+                print(f"  {file_type}: {mf['rows']} total rows, {mf['columns']} columns")
+                print(f"    → {mf['destination']}")
+
     if missing_files:
         print(f"\n✗ {len(missing_files)} files could not be processed:")
         for file_info in missing_files:
             print(f"  {file_info['year']} ({file_info['folder']}): {file_info['error']}")
-    
+
     print(f"\nOutput directory: /Users/anyamarchenko/CEGA Dropbox/Anya Marchenko/corn/interim")
     print("="*80)
 
-
 def process_nass_data():
-    """Process NASS census data and convert to ICPSR format."""
-    logger.info("Processing NASS census data...")
-    
-    processed_nass_data = []
-    
-    # Process 2017 data
+    """Process NASS 2017 & 2022 and convert to ICPSR-like format."""
+    processed = []
+
     df_2017 = load_nass_census_data(NASS_2017_FILE, 2017)
     if df_2017 is not None:
-        processed_2017 = process_nass_census_data(df_2017, 2017)
-        if processed_2017 is not None:
-            processed_nass_data.append(processed_2017)
-    
-    # Process 2022 data
+        p2017 = process_nass_census_data(df_2017, 2017)
+        if p2017 is not None:
+            processed.append(p2017)
+
     df_2022 = load_nass_census_data(NASS_2022_FILE, 2022)
     if df_2022 is not None:
-        processed_2022 = process_nass_census_data(df_2022, 2022)
-        if processed_2022 is not None:
-            processed_nass_data.append(processed_2022)
-    
-    return processed_nass_data
+        p2022 = process_nass_census_data(df_2022, 2022)
+        if p2022 is not None:
+            processed.append(p2022)
+
+    return processed
 
 def main():
-    """Main function to run the census data collection."""
+    """Main orchestrator."""
     logger.info("Starting agricultural census data collection...")
-    
-    # Set up directories
+
     interim_dir = setup_directories()
-    
-    # Load deflator data
+
+    # Load deflator once
     deflator_df = load_deflator_data()
     if deflator_df is None:
         logger.error("Failed to load deflator data. Exiting.")
         return
-    
-    # Process ICPSR data (1992-2012)
-    logger.info("Step 1: Processing ICPSR census data (1992-2012)...")
+
+    # Step 1: ICPSR 1992–2012
+    logger.info("Step 1: Processing ICPSR census data (1992–2012)...")
     icpsr_files, icpsr_missing = collect_census_files()
-    
-    # Process NASS data (2017, 2022)
+
+    # Step 2: NASS 2017/2022
     logger.info("Step 2: Processing NASS census data (2017, 2022)...")
     processed_nass_data = process_nass_data()
-    
-    # Combine all processed data
-    all_processed_data = []
-    collected_files = icpsr_files.copy()
-    missing_files = icpsr_missing.copy()
-    
-    # Add NASS data to the collection
+
+    # Step 3: Merge all years (if we have any NASS data)
     if processed_nass_data:
-        for nass_df in processed_nass_data:
-            year = nass_df['year'].iloc[0]
-            
-            # Save individual year file
-            year_file = interim_dir / str(year) / f"census_{year}_filtered.tsv"
-            nass_df.to_csv(year_file, sep='\t', index=False)
-            
-            # Add to processed data list
-            all_processed_data.append(nass_df)
-            
-            # Add to collected files summary
-            collected_files.append({
-                'year': year,
-                'folder': 'NASS',
-                'source': f'NASS_{year}',
-                'destination': str(year_file),
-                'rows': len(nass_df),
-                'columns': len(nass_df.columns)
-            })
-    
-    # Create merged dataset from all data
-    if all_processed_data:
-        logger.info("Step 3: Creating merged dataset...")
-        
-        # Load ICPSR data that was already processed
+        logger.info("Step 3: Creating merged dataset (1992–2022)...")
+
+        # Load already-saved ICPSR per-year files
         icpsr_data = []
-        for year in [1992, 1997, 2002, 2007, 2012]:
-            year_file = interim_dir / str(year) / f"census_{year}_filtered.tsv"
-            if year_file.exists():
-                df = pd.read_csv(year_file, sep='\t', low_memory=False)
-                icpsr_data.append(df)
-        
-        # Combine all data
-        all_data = icpsr_data + all_processed_data
+        for y in [1992, 1997, 2002, 2007, 2012]:
+            f = interim_dir / str(y) / f"census_{y}_filtered.tsv"
+            if f.exists():
+                icpsr_data.append(pd.read_csv(f, sep='\t', low_memory=False))
+
+        # Combine ICPSR + NASS
+        all_data = icpsr_data + processed_nass_data
         merged_df = pd.concat(all_data, ignore_index=True)
-        
-        # Apply deflation
-        logger.info("Step 4: Applying deflation...")
+
+        # Deflate
+        logger.info("Step 4: Applying deflation (1992–2022)...")
         merged_df_deflated = deflate_columns(merged_df, deflator_df, DEFLATABLE_COLS)
-        
-        # Create final datasets
+
+        # Build outputs
         essential_columns = ['year', 'name', 'level', 'fips', 'statefip', 'counfip']
-        real_columns = [f"{col}_real" for col in DEFLATABLE_COLS if f"{col}_real" in merged_df_deflated.columns]
-        other_columns = [col for col in merged_df_deflated.columns if col not in essential_columns and not col.endswith('_real') and col not in DEFLATABLE_COLS]
-        
-        # Final dataset with deflated values
-        final_columns = essential_columns + other_columns + real_columns
-        available_final_columns = [col for col in final_columns if col in merged_df_deflated.columns]
-        final_df = merged_df_deflated[available_final_columns].copy()
-        
-        # Full dataset without deflator columns
-        full_columns = [col for col in merged_df_deflated.columns if col != 'price_deflator']
-        full_df = merged_df_deflated[full_columns].copy()
-        
-        # Save final datasets
+        real_columns = [f"{c}_real" for c in DEFLATABLE_COLS if f"{c}_real" in merged_df_deflated.columns]
+        # Exclude price_deflator from deflated dataset
+        other_columns = [col for col in merged_df_deflated.columns
+                         if col not in essential_columns
+                         and not col.endswith('_real')
+                         and col not in DEFLATABLE_COLS
+                         and col != 'price_deflator']
+
+        # Deflated dataset (NO deflator)
+        final_columns = [c for c in (essential_columns + other_columns + real_columns)
+                         if c in merged_df_deflated.columns]
+        final_df = merged_df_deflated[final_columns].copy()
+
+        # Full dataset (WITH deflator)
+        full_df = merged_df_deflated.copy()
+
+        # Save
         final_file = interim_dir / "census_merged_1992_2022_deflated.tsv"
         final_df.to_csv(final_file, sep='\t', index=False)
-        
+
         full_file = interim_dir / "census_merged_1992_2022_full.tsv"
         full_df.to_csv(full_file, sep='\t', index=False)
-        
+
         logger.info(f"✓ Created deflated merged dataset: {final_file} ({len(final_df)} rows, {len(final_df.columns)} cols)")
-        logger.info(f"✓ Created full dataset (nominal + real): {full_file} ({len(full_df)} rows, {len(full_df.columns)} cols)")
-        
-        # Add merged files to summary
-        collected_files.extend([
+        logger.info(f"✓ Created full dataset (nominal + real + deflator): {full_file} ({len(full_df)} rows, {len(full_df.columns)} cols)")
+
+        # Extend summaries from earlier step
+        collected_files = icpsr_files + [
+            {
+                'year': 2017,
+                'folder': 'NASS',
+                'source': 'NASS_2017',
+                'destination': str(interim_dir / "2017" / "census_2017_filtered.tsv"),
+                'rows': len(processed_nass_data[0]) if processed_nass_data else 0,
+                'columns': len(processed_nass_data[0].columns) if processed_nass_data else 0
+            },
+            {
+                'year': 2022,
+                'folder': 'NASS',
+                'source': 'NASS_2022',
+                'destination': str(interim_dir / "2022" / "census_2022_filtered.tsv"),
+                'rows': len(processed_nass_data[1]) if len(processed_nass_data) > 1 else 0,
+                'columns': len(processed_nass_data[1].columns) if len(processed_nass_data) > 1 else 0
+            },
             {
                 'year': 'merged_deflated',
                 'folder': 'all',
@@ -908,15 +777,11 @@ def main():
                 'rows': len(full_df),
                 'columns': len(full_df.columns)
             }
-        ])
-    
-    # Print summary
-    print_summary(collected_files, missing_files)
-    
-    if collected_files:
-        logger.info("Data collection completed successfully!")
+        ]
+        print_summary(collected_files, icpsr_missing)
     else:
-        logger.warning("No files were collected. Please check the source paths.")
+        # No NASS data processed; still print ICPSR-only summary
+        print_summary(icpsr_files, icpsr_missing)
 
 if __name__ == "__main__":
     main()
