@@ -270,7 +270,7 @@ logger = logging.getLogger(__name__)
 # -----------------------------------
 
 # Choose which columns to deflate to real dollars
-DEFLATABLE_COLS = ['gov_payments_avg']
+DEFLATABLE_COLS = ['gov_payments_avg', 'gov_payments_conservation']
 
 # NASS files (2017–2022)
 NASS_2017_FILE = "/Users/anyamarchenko/CEGA Dropbox/Anya Marchenko/corn/raw/NASS_2017-2022/qs.census2017.txt"
@@ -278,7 +278,7 @@ NASS_2022_FILE = "/Users/anyamarchenko/CEGA Dropbox/Anya Marchenko/corn/raw/NASS
 
 # Variable mapping (ICPSR columns and the matching NASS short_desc)
 VARIABLE_MAPPING = {
-    'gov_payments_avg': {
+    'gov_payments_avg': { # per farm 
         'icpsr_columns': {
             1992: 'item040012',
             1997: 'item04012',
@@ -299,7 +299,18 @@ VARIABLE_MAPPING = {
         },
         'nass_short_desc': 'CORN, GRAIN - ACRES HARVESTED',
         'description': 'Corn for grain acres harvested'
-    }
+    },
+    'gov_payments_conservation': { # per farm 
+    'icpsr_columns': {
+        1992: 'item040015',
+        1997: 'item04015',
+        2002: 'item05011',
+        2007: 'data5_11',
+        2012: 'data5_11',
+    },
+    'nass_short_desc': 'GOVT PROGRAMS, FEDERAL, CONSERVATION & WETLANDS - RECEIPTS, MEASURED IN $ / OPERATION',
+    'description': 'Conservation govt payments average per farm'
+}
 }
 
 # -----------------------------------
