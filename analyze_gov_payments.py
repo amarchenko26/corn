@@ -59,21 +59,6 @@ def filter_us_data(df):
     
     logger.info(f"Found {len(us_data)} records with level==3")
     
-    # If no level==3 data, try alternative approaches
-    if len(us_data) == 0:
-        logger.warning("No level==3 data found. Trying alternative filters...")
-        
-        # Try different level values that might represent US
-        for level_val in [1, 2, 3, '3', 'USA', 'US']:
-            test_data = df[df['level'] == level_val]
-            if len(test_data) > 0:
-                logger.info(f"Found {len(test_data)} records with level=={level_val}")
-                logger.info(f"Sample names: {test_data['name'].unique()[:5]}")
-        
-        # Try name-based filtering as fallback
-        us_data = df[df['name'].str.contains('UNITED STATES|USA|US', case=False, na=False)].copy()
-        logger.info(f"Found {len(us_data)} records with US-related names")
-    
     if len(us_data) == 0:
         logger.error("No US-level data found. Showing sample of all data:")
         print("\nSample of all data:")
@@ -232,6 +217,81 @@ def create_time_series_plot(us_data, corn_counties_data):
     
     return years, us_gov_payments, corn_gov_payments, corn_acres
 
+def create_noncons_time_series_plot(us_data, corn_counties_data):
+    """Create: 'Average Government Payments per Farm (non-Conservation)' over time."""
+    logger.info("Creating non-conservation time series plot...")
+
+    target_col = 'gov_payments_noncons_real'
+    if target_col not in us_data.columns or (corn_counties_data is not None and target_col not in corn_counties_data.columns):
+        logger.error(f"{target_col} not found in data. Did you compute it?")
+        return None
+
+    years = sorted([int(y) for y in us_data['year'].dropna().unique()])
+
+    # US series
+    us_series = []
+    for y in years:
+        sub = us_data.loc[us_data['year'] == y, target_col]
+        val = sub.iloc[0] if len(sub) else np.nan
+        us_series.append(val)
+        if not pd.isna(val):
+            logger.info(f"Year {y} (US, non-cons): ${val:.0f}")
+
+    # Corn-counties series (average across corn counties in that year)
+    corn_series = []
+    for y in years:
+        if corn_counties_data is None:
+            corn_series.append(np.nan)
+            continue
+        sub = corn_counties_data.loc[corn_counties_data['year'] == y, target_col]
+        val = sub.mean() if len(sub) else np.nan
+        corn_series.append(val)
+        if not pd.isna(val):
+            logger.info(f"Year {y} (Corn counties, non-cons avg): ${val:.0f}")
+
+    # Plot (same style/labels as your first figure)
+    plt.style.use('seaborn-v0_8')
+    fig, ax = plt.subplots(1, 1, figsize=(12, 6))
+
+    ax.plot(years, us_series, marker='o', linewidth=2, markersize=8, color='#2E86AB', label='Entire US')
+    ax.plot(years, corn_series, marker='s', linewidth=2, markersize=8, color='#A23B72', label='Corn Counties Only')
+
+    # Farm bill verticals & labels
+    for i, (yr, label) in enumerate(zip(FARM_BILL_YEARS, FARM_BILL_LABELS)):
+        if years and (min(years) <= yr <= max(years)):
+            ax.axvline(x=yr, color='gray', linestyle='--', alpha=0.7, linewidth=1.5)
+            ax.text(yr, ax.get_ylim()[1]*(0.95 - i*0.05), label,
+                    rotation=90, va='top', ha='right', fontsize=9, alpha=0.8, color='gray')
+
+    ax.set_title('Average Government Payments per Farm (non-Conservation)\nAgricultural Census 1992–2022',
+                 fontsize=14, fontweight='bold')
+    ax.set_xlabel('Census Year', fontsize=12)
+    ax.set_ylabel('Average Government Payments per Farm (2017 $s)', fontsize=12)
+    ax.grid(True, alpha=0.3)
+    ax.set_xticks(years)
+    ax.legend()
+
+    # Point labels
+    for (y, v) in zip(years, us_series):
+        if not pd.isna(v):
+            ax.annotate(f'${v:.0f}', (y, v), textcoords="offset points", xytext=(0,10), ha='center', fontsize=9)
+    for (y, v) in zip(years, corn_series):
+        if not pd.isna(v):
+            ax.annotate(f'${v:.0f}', (y, v), textcoords="offset points", xytext=(0,-15), ha='center', fontsize=9)
+
+    plt.tight_layout()
+
+    # Save
+    output_dir = Path(OUTPUT_DIR) / FIGS_DIR
+    output_dir.mkdir(parents=True, exist_ok=True)
+    noncons_plot_path = output_dir / "gov_payments_noncons_timeseries.png"
+    plt.savefig(noncons_plot_path, dpi=300, bbox_inches='tight')
+    logger.info(f"Non-conservation plot saved to: {noncons_plot_path}")
+
+    plt.show()
+
+    return years, us_series, corn_series
+
 
 
 logger.info("Starting government payments analysis...")
@@ -241,6 +301,16 @@ df = load_merged_data()
 if df is None:
     logger.error("Failed to load census data. Exiting.")
     exit(1)
+
+# Make sure these exist and are numeric, then create non-conservation series
+for col in ['gov_payments_avg_real', 'gov_payments_conservation_real']:
+    if col not in df.columns:
+        logger.error(f"Required column missing: {col}")
+    else:
+        df[col] = pd.to_numeric(df[col], errors='coerce')
+
+df['gov_payments_noncons_real'] = df['gov_payments_avg_real'] - df['gov_payments_conservation_real']
+
 
 # Normalize year column
 df['year'] = pd.to_numeric(df['year'], errors='coerce').astype('Int64')
@@ -254,6 +324,9 @@ corn_counties_data = filter_corn_counties(df)
 # Create visualizations directly from the long format data
 # Pass both US data and corn counties data to the plotting function
 years, us_gov_payments, corn_gov_payments, corn_acres = create_time_series_plot(us_data, corn_counties_data)
+
+years_nc, us_noncons, corn_noncons = create_noncons_time_series_plot(us_data, corn_counties_data)
+
 
 # Additional analysis
 logger.info("\nAdditional Analysis:")

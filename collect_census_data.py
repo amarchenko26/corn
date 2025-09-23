@@ -316,6 +316,15 @@ VARIABLE_MAPPING = {
 # -----------------------------------
 # Helpers
 # -----------------------------------
+STATE_NAMES = [
+    "ALABAMA","ALASKA","ARIZONA","ARKANSAS","CALIFORNIA","COLORADO","CONNECTICUT","DELAWARE",
+    "DISTRICT OF COLUMBIA","FLORIDA","GEORGIA","HAWAII","IDAHO","ILLINOIS","INDIANA","IOWA",
+    "KANSAS","KENTUCKY","LOUISIANA","MAINE","MARYLAND","MASSACHUSETTS","MICHIGAN","MINNESOTA",
+    "MISSISSIPPI","MISSOURI","MONTANA","NEBRASKA","NEVADA","NEW HAMPSHIRE","NEW JERSEY",
+    "NEW MEXICO","NEW YORK","NORTH CAROLINA","NORTH DAKOTA","OHIO","OKLAHOMA","OREGON",
+    "PENNSYLVANIA","RHODE ISLAND","SOUTH CAROLINA","SOUTH DAKOTA","TENNESSEE","TEXAS","UTAH",
+    "VERMONT","VIRGINIA","WASHINGTON","WEST VIRGINIA","WISCONSIN","WYOMING"
+]
 
 def setup_directories():
     """Create interim directory structure if it doesn't exist."""
@@ -324,6 +333,69 @@ def setup_directories():
     for year in [1992, 1997, 2002, 2007, 2012, 2017, 2022]:
         (interim_dir / str(year)).mkdir(exist_ok=True)
     return interim_dir
+
+
+import re
+
+def _strip_state_prefix(raw: str) -> str:
+    """
+    For county-level rows, turn things like:
+      'Alabama\\Jefferson'  -> 'JEFFERSON'
+      'Alabama/Jefferson'   -> 'JEFFERSON'
+      'AlabamaJefferson'    -> 'JEFFERSON'
+      'JEFFERSON'           -> 'JEFFERSON'
+    Always returns UPPERCASE, trimmed.
+    """
+    if raw is None or (isinstance(raw, float) and pd.isna(raw)):
+        return pd.NA
+    s = str(raw).strip()
+
+    # Normalize slashes and split if present
+    s_norm = s.replace("\\", "/")
+    if "/" in s_norm:
+        tail = s_norm.split("/")[-1].strip()
+        return re.sub(r"^\W+|\W+$", "", tail).upper()
+
+    up = s_norm.upper().strip()
+
+    # Remove leading state name if string starts with it (no separator case)
+    for st in STATE_NAMES:
+        if up.startswith(st):
+            tail = up[len(st):].strip()
+            # Drop a leftover slash, backslash, or hyphen if present
+            tail = re.sub(r"^[\\/\-\s]+", "", tail)
+            return re.sub(r"^\W+|\W+$", "", tail).upper()
+
+    # Already just a county name
+    return re.sub(r"^\W+|\W+$", "", up).upper()
+
+def standardize_geo_names(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    - level==1 (COUNTY): name -> county name ONLY (uppercase)
+    - level==2 (STATE):  uppercase state name
+    - level==3 (US):     'UNITED STATES'
+    Operates in place and returns df.
+    """
+    if 'level' not in df.columns or 'name' not in df.columns:
+        return df
+
+    # Ensure numeric levels
+    df['level'] = pd.to_numeric(df['level'], errors='coerce').astype('Int64')
+
+    # COUNTY rows → county name only
+    m_county = df['level'] == 1
+    df.loc[m_county, 'name'] = df.loc[m_county, 'name'].apply(_strip_state_prefix)
+
+    # STATE rows → uppercase
+    m_state = df['level'] == 2
+    df.loc[m_state, 'name'] = df.loc[m_state, 'name'].astype(str).str.upper().str.strip()
+
+    # NATIONAL rows → fixed label
+    m_us = df['level'] == 3
+    df.loc[m_us, 'name'] = 'UNITED STATES'
+
+    return df
+
 
 def load_nass_census_data(file_path, year):
     """Load NASS census data TSV."""
@@ -334,6 +406,92 @@ def load_nass_census_data(file_path, year):
         logger.error(f"Error loading NASS {year} data: {e}")
         return None
 
+def make_fips_from_parts(statefip, counfip, level):
+    """
+    Build FIPS per rules:
+      - COUNTY: concat state (2-digit, zero-padded) + county (3-digit, zero-padded),
+                then convert to int to drop any leading zero -> 4 or 5 digits.
+      - STATE:  state FIPS as int (no leading zero).
+      - US:     99000.
+    Returns pandas nullable Int64.
+    """
+    if level == 1:  # COUNTY
+        s = (pd.Series(statefip, dtype="string").str.strip()
+                 .str.replace(r'\.0$', '', regex=True).fillna("")).str.zfill(2)
+        c = (pd.Series(counfip, dtype="string").str.strip()
+                 .str.replace(r'\.0$', '', regex=True).fillna("")).str.zfill(3)
+        combo = (s + c).where((s != "") & (c != ""), None)
+        # int() to drop any leading zero; cast back to nullable Int64
+        return pd.to_numeric(combo, errors="coerce").astype("Int64")
+    elif level == 2:  # STATE
+        s = pd.Series(statefip, dtype="string").str.strip().str.replace(r'\.0$', '', regex=True)
+        return pd.to_numeric(s, errors="coerce").astype("Int64")
+    elif level == 3:  # US
+        return pd.Series([99000] * (len(statefip) if hasattr(statefip, "__len__") else 1), dtype="Int64")
+    else:
+        return pd.Series([pd.NA] * (len(statefip) if hasattr(statefip, "__len__") else 1), dtype="Int64")
+
+
+def normalize_fips_after_merge(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Standardize FIPS across all years:
+      - NATIONAL (level==3): fips = 99000
+      - STATE    (level==2): fips = numeric(statefip)  [2-digit, no leading zero kept]
+      - COUNTY   (level==1): if both parts present, fips = int(SS.zfill(2)+CCC.zfill(3)); else NA
+    Ensures no 0-valued FIPS from missing parts; uses pandas nullable Int64.
+    """
+    df = df.copy()
+    # Coerce level to numeric
+    df['level'] = pd.to_numeric(df.get('level'), errors='coerce').astype('Int64')
+
+    # Clean the component codes to strings; don't pad yet
+    def _clean_part(s):
+        s = pd.Series(s, dtype="string")
+        s = s.str.strip().str.replace(r'\.0$', '', regex=True)   # drop accidental float tails
+        s = s.replace({"": pd.NA, ".": pd.NA, "nan": pd.NA, "None": pd.NA})
+        return s
+
+    if 'statefip' in df.columns:
+        df['statefip'] = _clean_part(df['statefip'])
+    if 'counfip' in df.columns:
+        df['counfip'] = _clean_part(df['counfip'])
+
+    # NATIONAL → 99000
+    m_nat = df['level'] == 3
+    df.loc[m_nat, 'fips'] = 99000
+
+    # STATE → numeric(statefip)
+    m_state = df['level'] == 2
+    df.loc[m_state, 'fips'] = pd.to_numeric(df.loc[m_state, 'statefip'], errors='coerce').astype('Int64')
+
+    # COUNTY → concat padded parts, but only if BOTH present
+    m_county = df['level'] == 1
+    s_ok = df.loc[m_county, 'statefip'].notna()
+    c_ok = df.loc[m_county, 'counfip'].notna()
+    ok = m_county.copy()
+    ok.loc[ok] = s_ok & c_ok
+
+    # Build only for rows with both parts; leave others NA
+    ss = df.loc[ok, 'statefip'].astype(str).str.zfill(2)
+    cc = df.loc[ok, 'counfip'].astype(str).str.zfill(3)
+    df.loc[ok, 'fips'] = pd.to_numeric(ss + cc, errors='coerce').astype('Int64')
+
+    # Any residual 0s (which imply bad/missing parts) → NA except national
+    m_zero_bad = df['fips'].fillna(-1).eq(0) & ~m_nat
+    df.loc[m_zero_bad, 'fips'] = pd.NA
+
+    # Optional: enforce state format (2-digit int), county length (4–5 digits) for sanity
+    # (just warnings; comment out if noisy)
+    # bad_state = (m_state) & df['fips'].notna() & ~df['fips'].astype(str).str.len().isin([1,2])
+    # bad_county = (m_county) & df['fips'].notna() & ~df['fips'].astype(str).str.len().isin([4,5])
+    # if bad_state.any(): logger.warning(f"{bad_state.sum()} state rows have non-1/2-digit FIPS")
+    # if bad_county.any(): logger.warning(f"{bad_county.sum()} county rows have non-4/5-digit FIPS")
+
+    # Keep nullable Int64
+    df['fips'] = df['fips'].astype('Int64')
+    return df
+
+
 def process_nass_census_data(df, year):
     """
     Minimal processor for NASS 2017/2022:
@@ -341,6 +499,7 @@ def process_nass_census_data(df, year):
       - exact SHORT_DESC match using VARIABLE_MAPPING[var]['nass_short_desc'] (case/space-normalized)
       - cleans VALUE: (D)/(H)/(NA)/(Z) -> NaN; remove $ and commas
       - maps by level to columns named by VARIABLE_MAPPING keys
+      - constructs FIPS per user rules (county=5-digit combo, state=2-digit, US=99000; no leading zeros retained)
     """
     logger.info(f"Processing NASS {year} data (minimal TOTAL-domain pipeline)")
 
@@ -359,7 +518,7 @@ def process_nass_census_data(df, year):
         if col in df.columns:
             df[col] = norm(df[col])
 
-    # zero-pad FIPS for consistent keys
+    # zero-pad FIPS source fields for keying; we'll drop leading zeros when making integers
     if 'STATE_FIPS_CODE' in df.columns:
         df['STATE_FIPS_CODE'] = df['STATE_FIPS_CODE'].astype(str).str.zfill(2)
     if 'COUNTY_CODE' in df.columns:
@@ -387,21 +546,29 @@ def process_nass_census_data(df, year):
                     .drop_duplicates()
                     .rename(columns={'YEAR':'year','COUNTY_NAME':'name',
                                      'STATE_FIPS_CODE':'statefip','COUNTY_CODE':'counfip'}))
+            # FIPS (county): concat then convert to integer (drops leading zeros)
+            base['fips'] = make_fips_from_parts(base['statefip'], base['counfip'], level=1)
             make_bkey = lambda b: b['name'] + '_' + b['statefip'] + '_' + b['counfip']
             make_key  = lambda d: d['COUNTY_NAME'] + '_' + d['STATE_FIPS_CODE'] + '_' + d['COUNTY_CODE']
+
         elif lvl_name == 'STATE':
             base = (sub[['YEAR','STATE_NAME','STATE_FIPS_CODE','level']]
                     .drop_duplicates()
                     .rename(columns={'YEAR':'year','STATE_NAME':'name','STATE_FIPS_CODE':'statefip'}))
             base['counfip'] = np.nan
+            # FIPS (state): numeric 2-digit
+            base['fips'] = make_fips_from_parts(base['statefip'], None, level=2)
             make_bkey = lambda b: b['name'] + '_' + b['statefip']
             make_key  = lambda d: d['STATE_NAME'] + '_' + d['STATE_FIPS_CODE']
+
         else:  # NATIONAL
             base = (sub[['YEAR','COUNTRY_NAME','level']]
                     .drop_duplicates()
                     .rename(columns={'YEAR':'year','COUNTRY_NAME':'name'}))
             base['statefip'] = np.nan
             base['counfip'] = np.nan
+            # FIPS (US): 99000
+            base['fips'] = make_fips_from_parts(None, None, level=3)
             make_bkey = lambda b: b['name']
             make_key  = lambda d: d['COUNTRY_NAME']
 
@@ -432,7 +599,7 @@ def process_nass_census_data(df, year):
     if result.empty:
         logger.warning(f"No usable rows found for NASS {year} with DOMAIN=='TOTAL' after simple mapping.")
     else:
-        keep_cols = ['year','name','level','statefip','counfip'] + [c for c in VARIABLE_MAPPING.keys() if c in result.columns]
+        keep_cols = ['year','name','level','fips','statefip','counfip'] + [c for c in VARIABLE_MAPPING.keys() if c in result.columns]
         logger.info(f"NASS {year} processed rows: {len(result)} | cols: {len(keep_cols)}")
         logger.info(result[keep_cols].head().to_string())
         result = result[keep_cols]
@@ -598,46 +765,6 @@ def collect_census_files():
             logger.error(f"✗ Failed to process {source_file}: {e}")
             missing_files.append({'folder': folder, 'year': year, 'error': str(e)})
 
-    # Create merged datasets (1992–2012 only)
-    if processed_dataframes:
-        logger.info("Creating merged dataset (1992–2012)...")
-        merged_df = pd.concat(processed_dataframes, ignore_index=True)
-
-        merged_df_deflated = deflate_columns(merged_df, deflator_df, DEFLATABLE_COLS)
-
-        # Deflated dataset: DO NOT include price_deflator
-        essential_columns = ['year', 'name', 'level', 'fips', 'statefip', 'counfip', 'corn_for_grain_acres']
-        real_columns = [f"{col}_real" for col in DEFLATABLE_COLS if f"{col}_real" in merged_df_deflated.columns]
-        final_columns = [c for c in (essential_columns + real_columns) if c in merged_df_deflated.columns]
-        final_df = merged_df_deflated[final_columns].copy()
-        final_df = final_df.drop(columns=['price_deflator'], errors='ignore')  # ensure it's not there
-
-        final_file = interim_dir / "census_merged_1992_2012_deflated.tsv"
-        final_df.to_csv(final_file, sep='\t', index=False)
-        logger.info(f"✓ Created deflated merged dataset: {final_file} ({len(final_df)} rows, {len(final_df.columns)} cols)")
-
-        # Full dataset: INCLUDE price_deflator
-        full_file = interim_dir / "census_merged_1992_2012_full.tsv"
-        merged_df_deflated.to_csv(full_file, sep='\t', index=False)
-        logger.info(f"✓ Created full dataset (nominal + real + deflator): {full_file} ({len(merged_df_deflated)} rows, {len(merged_df_deflated.columns)} cols)")
-
-        collected_files.append({
-            'year': 'merged_deflated',
-            'folder': 'all',
-            'source': 'multiple',
-            'destination': str(final_file),
-            'rows': len(final_df),
-            'columns': len(final_df.columns)
-        })
-        collected_files.append({
-            'year': 'merged_full',
-            'folder': 'all',
-            'source': 'multiple',
-            'destination': str(full_file),
-            'rows': len(merged_df_deflated),
-            'columns': len(merged_df_deflated.columns)
-        })
-
     return collected_files, missing_files
 
 def print_summary(collected_files, missing_files):
@@ -659,7 +786,6 @@ def print_summary(collected_files, missing_files):
             for mf in merged_files:
                 file_type = "deflated (real dollars)" if mf['year'] == 'merged_deflated' else "full (nominal + real + deflator)"
                 print(f"  {file_type}: {mf['rows']} total rows, {mf['columns']} columns")
-                print(f"    → {mf['destination']}")
 
     if missing_files:
         print(f"\n✗ {len(missing_files)} files could not be processed:")
@@ -721,6 +847,9 @@ def main():
         # Combine ICPSR + NASS
         all_data = icpsr_data + processed_nass_data
         merged_df = pd.concat(all_data, ignore_index=True)
+
+        merged_df = normalize_fips_after_merge(merged_df) 
+        merged_df = standardize_geo_names(merged_df)
 
         # Deflate
         logger.info("Step 4: Applying deflation (1992–2022)...")
