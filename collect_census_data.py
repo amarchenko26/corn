@@ -33,6 +33,7 @@ Census years and corresponding variable names:
         129 item010061 Corn for silage or green chop (acres), 1992
         131 item010062 Corn for silage/green chop (tons, green), 1992
 
+        526 item040010 Gov payments-Total received, (farms), 1992
         527 item040011 Gov payments-Total received, ($1,000), 1992
         529 item040012 Gov payments-Total received average per farm (dollars), 1992
         531 item040013 Gov payments-CRP & WRP, (farms), 1992
@@ -275,7 +276,7 @@ NASS_2017_FILE = "/Users/anyamarchenko/CEGA Dropbox/Anya Marchenko/corn/raw/NASS
 NASS_2022_FILE = "/Users/anyamarchenko/CEGA Dropbox/Anya Marchenko/corn/raw/NASS_2017-2022/qs.census2022.txt"
 
 VARIABLE_MAPPING = {
-    'gov_pay_total': { # nominal dollars per farm 
+    'gov_all_pf': { # nominal dollars per farm 
         'deflate': True,
         'icpsr_columns': {
             1992: 'item040012',
@@ -286,7 +287,29 @@ VARIABLE_MAPPING = {
         },
         'nass_short_desc': 'GOVT PROGRAMS, FEDERAL - RECEIPTS, MEASURED IN $ / OPERATION'
     },
-    'gov_pay_conservation': { # nominal dollars per farm 
+    'gov_all_n': { # farms with receipts
+        'deflate': False,
+        'icpsr_columns': {
+            1992: 'item040010',
+            1997: 'item04010',
+            2002: 'item05001',
+            2007: 'data5_1',
+            2012: 'data5_1',
+        },
+        'nass_short_desc': 'GOVT PROGRAMS, FEDERAL - OPERATIONS WITH RECEIPTS'
+    },
+    'gov_all_amt': { # total nominal dollars 
+        'deflate': True,
+        'icpsr_columns': {
+            1992: 'item040011',
+            1997: 'item04011',
+            2002: 'item05003',
+            2007: 'data5_3',
+            2012: 'data5_3',
+        },
+        'nass_short_desc': 'GOVT PROGRAMS, FEDERAL - RECEIPTS, MEASURED IN $'
+    },
+    'gov_cons_pf': { # nominal dollars per farm in conservation payments 
         'deflate': True,
         'icpsr_columns': {
             1992: 'item040015',
@@ -297,7 +320,29 @@ VARIABLE_MAPPING = {
         },
         'nass_short_desc': 'GOVT PROGRAMS, FEDERAL, CONSERVATION & WETLANDS - RECEIPTS, MEASURED IN $ / OPERATION'
     },
-    'gov_pay_exc_conservation': { # nominal dollars per farm 
+    'gov_cons_amt': { # total nominal dollars 
+        'deflate': True,
+        'icpsr_columns': {
+            1992: 'item040014',
+            1997: 'item04014',
+            2002: 'item05009',
+            2007: 'data5_9',
+            2012: 'data5_9',
+        },
+        'nass_short_desc': 'GOVT PROGRAMS, FEDERAL, CONSERVATION & WETLANDS - RECEIPTS, MEASURED IN $'
+    },
+    'gov_cons_n': { # farms with receipts
+        'deflate': False,
+        'icpsr_columns': {
+            1992: 'item040013',
+            1997: 'item04013',
+            2002: 'item05007',
+            2007: 'data5_7',
+            2012: 'data5_7',
+        },
+        'nass_short_desc': 'GOVT PROGRAMS, FEDERAL, CONSERVATION & WETLANDS - OPERATIONS WITH RECEIPTS'
+    },
+    'gov_exc_cons_pf': { # nominal dollars per farm
         'deflate': True,
         'icpsr_columns': {
             1992: '',
@@ -308,7 +353,7 @@ VARIABLE_MAPPING = {
         },
         'nass_short_desc': 'GOVT PROGRAMS, FEDERAL, (EXCL CONSERVATION & WETLANDS) - RECEIPTS, MEASURED IN $ / OPERATION'
     },
-    'gov_pay_other_fed_programs': { # nominal dollars per farm 
+    'gov_other_pay_pf': { # nominal dollars per farm 
         'deflate': True,
         'icpsr_columns': {
             1992: '',
@@ -320,7 +365,7 @@ VARIABLE_MAPPING = {
         'nass_short_desc': ''
     }
     ,
-    'ccc_loans_total_dollars': { # $1,000 
+    'ccc_loan_amt': { # $1,000 in loans  
         'deflate': True,
         'icpsr_columns': {
             1992: 'item040031',
@@ -331,7 +376,7 @@ VARIABLE_MAPPING = {
         },
         'nass_short_desc': 'CCC LOANS - RECEIPTS, MEASURED IN $'
     },
-    'ccc_loans_total_farms': { # farms
+    'ccc_loan_n': { # total farms receiving loans 
         'deflate': False,
         'icpsr_columns': {
             1992: 'item040030',
@@ -361,9 +406,9 @@ VARIABLE_MAPPING = {
 
 MANUAL_CALCS = [
     {
-        "name": "gov_pay_exc_conservation_calculated",  # output column name
+        "name": "gov_exc_cons_pf_calc",  # output column name
         "op": "sub",                                    # 'add' or 'sub'
-        "inputs": ["gov_pay_total_real", "gov_pay_conservation_real"],
+        "inputs": ["gov_all_pf_real", "gov_cons_pf_real"],  # input columns
         # "na_zero": False,  # optional (default False). True => treat missing as 0
     },
     # Examples:
