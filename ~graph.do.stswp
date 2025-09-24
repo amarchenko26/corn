@@ -1,0 +1,5 @@
+import delimited "/Users/anyamarchenko/CEGA Dropbox/Anya Marchenko/corn/interim/census_merged_1992_2022_deflated.tsv", clear 
+
+destring corn_for_grain_acres , replace
+
+keep if level == 1 // keep counties

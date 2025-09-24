@@ -24,7 +24,8 @@ OUTPUT_DIR              = "/Users/anyamarchenko/Documents/GitHub/corn/output"
 FIGS_DIR                = "figs"
 TABS_DIR                = "tabs"
 PLOT_FILENAME           = "government_payments_timeseries.png"
-GOV_PAYMENTS_COLUMN     = "gov_payments_avg_real"  # Use the deflated column
+GOV_PAYMENTS_COLUMN     = "gov_pay_total_real"  # Use the deflated column
+GOV_PAYMENTS_CONSERVATION_COLUMN     = "gov_pay_conservation_real"  # Use the deflated column
 FARM_BILL_YEARS         = [1996, 2002, 2008, 2014, 2018, 2025]
 FARM_BILL_LABELS        = ['1996 Farm Bill', '2002 Farm Bill', '2008 Farm Bill', '2014 Farm Bill', '2018 Farm Bill', '2025 BBB']
 
@@ -292,6 +293,120 @@ def create_noncons_time_series_plot(us_data, corn_counties_data):
 
     return years, us_series, corn_series
 
+# Requires: import numpy as np, import matplotlib.pyplot as plt, from pathlib import Path
+# Uses your globals: OUTPUT_DIR, FIGS_DIR, FARM_BILL_YEARS, FARM_BILL_LABELS
+
+def create_ccc_loans_per_farm_plot(us_data: pd.DataFrame,
+                                   corn_counties_data: pd.DataFrame = None,
+                                   dollars_col: str = 'ccc_loans_total_dollars_real',
+                                   farms_col: str = 'ccc_loans_total_farms',
+                                   dollars_is_thousands: bool = True):
+    """
+    Plot CCC loans (real) per farm over time for US and corn counties.
+    - us_data: one row per year at level==3, or otherwise summed per year.
+    - corn_counties_data: county-level rows filtered to your 'corn counties'.
+      We aggregate by summing dollars and farms across those counties each year.
+    - dollars_col: real dollars column (often in $1,000 units after deflation)
+    - farms_col: count of operations with CCC loans
+    - dollars_is_thousands: if True, multiply dollars by 1,000 before dividing by farms
+    """
+
+    logger.info("Creating CCC loans per farm time series plot...")
+
+    # Basic checks
+    missing = [c for c in [dollars_col, farms_col] if c not in us_data.columns]
+    if missing:
+        logger.error(f"US data missing columns: {missing}")
+        return None
+    if (corn_counties_data is not None) and any(c not in corn_counties_data.columns for c in [dollars_col, farms_col]):
+        logger.warning("Corn-counties data is missing one of the required columns; corn series may be empty.")
+
+    # Years from US data (like your previous function)
+    years = sorted([int(y) for y in us_data['year'].dropna().unique()])
+
+    scale = 1000.0 if dollars_is_thousands else 1.0
+
+    def _per_farm_series(df: pd.DataFrame, label: str):
+        """Compute dollars-per-farm per year by summing dollars and farms within year."""
+        out = []
+        for y in years:
+            sub = df[df['year'] == y]
+            if sub.empty or dollars_col not in sub.columns or farms_col not in sub.columns:
+                out.append(np.nan)
+                continue
+
+            # Coerce numeric
+            d = pd.to_numeric(sub[dollars_col], errors='coerce').sum(skipna=True)
+            f = pd.to_numeric(sub[farms_col], errors='coerce').sum(skipna=True)
+
+            if pd.isna(d) or pd.isna(f) or f <= 0:
+                out.append(np.nan)
+                continue
+
+            val = (d * scale) / f
+            out.append(val)
+            logger.info(f"Year {y} ({label}): ${val:,.0f} per farm (dollars_col={d}, farms={f})")
+        return out
+
+    # US series (sum is fine even if there's only one row per year)
+    us_series = _per_farm_series(us_data, "US")
+
+    # Corn-counties series (weighted by farms via sums)
+    if corn_counties_data is not None and not corn_counties_data.empty:
+        corn_series = _per_farm_series(corn_counties_data, "Corn counties")
+    else:
+        corn_series = [np.nan] * len(years)
+
+    # === Plot styling matches your previous function ===
+    plt.style.use('seaborn-v0_8')
+    fig, ax = plt.subplots(1, 1, figsize=(12, 6))
+
+    ax.plot(years, us_series, marker='o', linewidth=2, markersize=8,
+            color='#2E86AB', label='Entire US')
+    ax.plot(years, corn_series, marker='s', linewidth=2, markersize=8,
+            color='#A23B72', label='Corn Counties Only')
+
+    # Farm Bill verticals & labels (reuse your globals)
+    try:
+        for i, (yr, label) in enumerate(zip(FARM_BILL_YEARS, FARM_BILL_LABELS)):
+            if years and (min(years) <= yr <= max(years)):
+                ax.axvline(x=yr, color='gray', linestyle='--', alpha=0.7, linewidth=1.5)
+                ax.text(yr, ax.get_ylim()[1]*(0.95 - i*0.05), label,
+                        rotation=90, va='top', ha='right', fontsize=9, alpha=0.8, color='gray')
+    except Exception:
+        # If FARM_BILL_* not defined, just skip silently
+        pass
+
+    ax.set_title('CCC Loans per Farm (2017 $)\nAgricultural Census 1992–2022',
+                 fontsize=14, fontweight='bold')
+    ax.set_xlabel('Census Year', fontsize=12)
+    ax.set_ylabel('Dollars per Farm (2017 $)', fontsize=12)
+    ax.grid(True, alpha=0.3)
+    ax.set_xticks(years)
+    ax.legend()
+
+    # Point labels
+    for (y, v) in zip(years, us_series):
+        if not pd.isna(v):
+            ax.annotate(f'${v:,.0f}', (y, v), textcoords="offset points", xytext=(0,10),
+                        ha='center', fontsize=9)
+    for (y, v) in zip(years, corn_series):
+        if not pd.isna(v):
+            ax.annotate(f'${v:,.0f}', (y, v), textcoords="offset points", xytext=(0,-15),
+                        ha='center', fontsize=9)
+
+    plt.tight_layout()
+
+    # Save
+    output_dir = Path(OUTPUT_DIR) / FIGS_DIR
+    output_dir.mkdir(parents=True, exist_ok=True)
+    out_path = output_dir / "ccc_loans_per_farm_timeseries.png"
+    plt.savefig(out_path, dpi=300, bbox_inches='tight')
+    logger.info(f"CCC loans per-farm plot saved to: {out_path}")
+
+    plt.show()
+
+    return years, us_series, corn_series
 
 
 logger.info("Starting government payments analysis...")
@@ -303,19 +418,15 @@ if df is None:
     exit(1)
 
 # Make sure these exist and are numeric, then create non-conservation series
-for col in ['gov_payments_avg_real', 'gov_payments_conservation_real']:
+for col in [GOV_PAYMENTS_COLUMN, GOV_PAYMENTS_CONSERVATION_COLUMN]:
     if col not in df.columns:
         logger.error(f"Required column missing: {col}")
     else:
         df[col] = pd.to_numeric(df[col], errors='coerce')
 
-df['gov_payments_noncons_real'] = df['gov_payments_avg_real'] - df['gov_payments_conservation_real']
+df['gov_payments_noncons_real'] = df[GOV_PAYMENTS_COLUMN] - df[GOV_PAYMENTS_CONSERVATION_COLUMN]
 
-
-# Normalize year column
 df['year'] = pd.to_numeric(df['year'], errors='coerce').astype('Int64')
-
-# Filter for US data
 us_data = filter_us_data(df)
 
 # Filter for counties that grew corn (from original data, not US-level data)
@@ -324,51 +435,9 @@ corn_counties_data = filter_corn_counties(df)
 # Create visualizations directly from the long format data
 # Pass both US data and corn counties data to the plotting function
 years, us_gov_payments, corn_gov_payments, corn_acres = create_time_series_plot(us_data, corn_counties_data)
-
 years_nc, us_noncons, corn_noncons = create_noncons_time_series_plot(us_data, corn_counties_data)
+years_ccc, us_ccc, corn_ccc = create_ccc_loans_per_farm_plot(us_data, corn_counties_data)
 
-
-# Additional analysis
-logger.info("\nAdditional Analysis:")
-
-# Show the actual data we're working with
-logger.info(f"US-wide government payments by year (2017 dollars):")
-for year, value in zip(years, us_gov_payments):
-    if not pd.isna(value):
-        logger.info(f"  {year}: ${value:,.0f}")
-    else:
-        logger.info(f"  {year}: Missing")
-
-logger.info(f"Corn counties government payments by year (2017 dollars):")
-for year, value in zip(years, corn_gov_payments):
-    if not pd.isna(value):
-        logger.info(f"  {year}: ${value:,.0f}")
-    else:
-        logger.info(f"  {year}: Missing")
-
-logger.info(f"Total corn acres by year:")
-for year, value in zip(years, corn_acres):
-    if not pd.isna(value):
-        logger.info(f"  {year}: {value:,.0f} acres")
-    else:
-        logger.info(f"  {year}: Missing")
-
-# Calculate percentage changes for both US and corn counties
-if len([v for v in us_gov_payments if not pd.isna(v)]) > 1:
-    valid_values = [(year, value) for year, value in zip(years, us_gov_payments) if not pd.isna(value)]
-    if len(valid_values) >= 2:
-        first_year, first_value = valid_values[0]
-        last_year, last_value = valid_values[-1]
-        pct_change = ((last_value - first_value) / first_value) * 100
-        logger.info(f"US-wide change from {first_year} to {last_year}: {pct_change:.1f}%")
-
-if len([v for v in corn_gov_payments if not pd.isna(v)]) > 1:
-    valid_values = [(year, value) for year, value in zip(years, corn_gov_payments) if not pd.isna(value)]
-    if len(valid_values) >= 2:
-        first_year, first_value = valid_values[0]
-        last_year, last_value = valid_values[-1]
-        pct_change = ((last_value - first_value) / first_value) * 100
-        logger.info(f"Corn counties change from {first_year} to {last_year}: {pct_change:.1f}%")
 
 logger.info("Analysis completed successfully!")
 

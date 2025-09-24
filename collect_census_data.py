@@ -2,8 +2,7 @@
 """
 Agricultural Census Data Collection Script
 
-This script collects census data files from different years, filters for the corresponding variables, and merges them into one data file
-into an interim folder.
+This script collects census data files from different years, filters for the corresponding variables, and merges them into one data file into an interim folder.
 
 Census years and corresponding folder mappings:
 - DS0042: 1992
@@ -129,25 +128,18 @@ Census years and corresponding variable names:
         77 item01067 Selected crops harvested, Corn for silage or greenchop (tons, 2002)
 
         384 item05001 Government payments, Total received (farms, 2002)
-        385 item05002 Government payments, Total received (farms, 1997)
         386 item05003 Government payments, Total received ($1,000, 2002)
-        387 item05004 Government payments, Total received ($1,000, 1997)
         388 item05005 Government payments, Total received, Average per farm (dollars, 2002)
-        389 item05006 Government payments, Total received, Average per farm (dollars, 1997)
         390 item05007 Government payments, Total received, Amount from Conservation Reserve & Wetlands Reserve Programs (farms, 2002)
-        391 item05008 Government payments, Total received, Amount from Conservation Reserve & Wetlands Reserve Programs (farms, 1997)
         392 item05009 Government payments, Total received, Amount from Conservation Reserve & Wetlands Reserve Programs ($1,000, 2002)
-        393 item05010 Government payments, Total received, Amount from Conservation Reserve & Wetlands Reserve Programs ($1,000, 1997)
         394 item05011 Government payments, Total received, Amount from Conservation Reserve & Wetlands Reserve Programs, Average per farm (dollars, 2002)
-        395 item05012 Government payments, Total received, Amount from Conservation Reserve & Wetlands Reserve Programs, Average per farm (dollars, 1997)
         396 item05013 Government payments, Total received, Amount from other federal farm programs (farms, 2002)
-        397 item05014 Government payments, Total received, Amount from other federal farm programs (farms, 1997)
         398 item05015 Government payments, Total received, Amount from other federal farm programs ($1,000, 2002)
-        399 item05016 Government payments, Total received, Amount from other federal farm programs ($1,000, 1997)
         400 item05017 Government payments, Total received, Amount from other federal farm programs, Average per farm (dollars, 2002)
-        401 item05018 Government payments, Total received, Amount from other federal farm programs, Average per farm (dollars, 1997)
         402 item05019 Commodity Credit Corporation loans, Total (farms, 2002)
         404 item05021 Commodity Credit Corporation loans, Total ($1,000, 2002)
+
+        #-------2002 doesn't break CCC loans further by crop 
 
 - 2007: 
         1 state State ICPSR code
@@ -167,27 +159,16 @@ Census years and corresponding variable names:
         74 data1_67 Selected crops harvested\Corn for silage or greenchop (tons)
 
         422 data5_1 Government payments\Total received (farms, 2007)
-        423 data5_2 Government payments\Total received (farms, 2002)
         424 data5_3 Government payments\Total received ($1,000, 2007)
-        425 data5_4 Government payments\Total received ($1,000, 2002)
         426 data5_5 Government payments\Total received\Average per farm (dollars, 2007)
-        427 data5_6 Government payments\Total received\Average per farm (dollars, 2002)
         428 data5_7 Government payments\Total received\Amount from Conservation Reserve, Wetlands Reserve, Farmable Wetlands, & Conservation Reserve Enhancement Programs 2002 (farms, 2007)
-        429 data5_8 Government payments\Total received\Amount from conservation reserve, wetlands reserve, farmable wetlands, & conservation reserve enhancement programs 2002 (farms, 2002)
         430 data5_9 Government payments\Total received\Amount from conservation reserve, wetlands reserve, farmable wetlands, & conservation reserve enhancement programs 2002 ($1,000, 2007)
-        431 data5_10 Government payments\Total received\Amount from conservation reserve, wetlands reserve, farmable wetlands, & conservation reserve enhancement programs 2002 ($1,000, 2002)
         432 data5_11 Government payments\Total received\Amount from conservation reserve, wetlands reserve, farmable wetlands, & conservation reserve enhancement programs 2002\Average per farm (dollars, 2007)
-        433 data5_12 Government payments\Total received\Amount from conservation reserve, wetlands reserve, farmable wetlands, & conservation reserve enhancement programs 2002\Average per farm (dollars, 2002)
         434 data5_13 Government payments\Total received\Amount from other federal farm programs (farms, 2007)
-        435 data5_14 Government payments\Total received\Amount from other federal farm programs (farms, 2002)
         436 data5_15 Government payments\Total received\Amount from other federal farm programs ($1,000, 2007)
-        437 data5_16 farm programs ($1,000, 2007) Government payments\Total received\Amount from other federal farm programs ($1,000, 2002)
         438 data5_17 Government payments\Total received\Amount from other federal farm programs\Average per farm (dollars, 2007)
-        439 data5_18 Government payments\Total received\Amount from other federal farm programs\Average per farm (dollars, 2002)
         440 data5_19 Commodity credit corporation loans\Total (farms, 2007)
-        441 data5_20 Commodity credit corporation loans\Total (farms, 2002)
         442 data5_21 Commodity credit corporation loans\Total ($1,000, 2007)
-        443 data5_22 Commodity credit corporation loans\Total ($1,000, 2002)
 
 - 2012: 
         1 stateicp State ICPSR code
@@ -207,49 +188,70 @@ Census years and corresponding variable names:
         75 data1_68 Selected crops harvested\Corn for silage or greenchop (tons)
 
         439 data5_1 Government payments\Total received (farms, 2012)
-        440 data5_2 Government payments\Total received (farms, 2007)
         441 data5_3 Government payments\Total received ($1,000, 2012)
-        442 data5_4 Government payments\Total received ($1,000, 2007)
         443 data5_5 Government payments\Total received\average per farm ($, 2012)
-        444 data5_6 Government payments\Total received\average per farm ($, 2007)
         445 data5_7 Government payments\Total received\Amount from conservation reserve, wetlands reserve & conservation reserve enhancement programs 2007 (farms, 2012)
-        446 data5_8 Government payments\Total received\Amount from conservation reserve, wetlands reserve  & conservation reserve enhancement programs 2007 (farms, 2007)
         447 data5_9 Government payments\Total received\Amount from conservation reserve, wetlands reserve & conservation reserve enhancement programs 2007 ($1,000, 2012)
-        448 data5_10 Government payments\Total received\Amount from conservation reserve, wetlands reserve & conservation reserve enhancement programs 2007 ($1,000, 2007)
         449 data5_11 Government payments\Total received\Amount from conservation reserve, wetlands reserve & conservation reserve enhancement programs 2007\Average per farm ($, 2012)
-        450 data5_12 Government payments\Total received\Amount from conservation reserve, wetlands reserve & conservation reserve enhancement programs 2007\Average per farm ($, 2007)
         451 data5_13 Government payments\Total received\Amount from other federal farm programs (farms, 2012)
-        452 data5_14 Government payments\Total received\Amount from other federal farm programs (farms, 2007)
         453 data5_15 Government payments\Total received\Amount from other federal farm programs ($1,000, 2012)
-        454 data5_16 Government payments\Total received\Amount from other federal farm programs ($1,000, 2007)
         455 data5_17 Government payments\Total received\Amount from other federal farm programs\Average per farm ($, 2012)
-        456 data5_18 Government payments\Total received\Amount from other federal farm programs\Average per farm ($, 2007)
         457 data5_19 Commodity credit corporation loans\Total (farms, 2012)
-        458 data5_20 Commodity credit corporation loans\Total (farms, 2007)
         459 data5_21 Commodity credit corporation loans\Total ($1,000, 2012)
-        460 data5_22 Commodity credit corporation loans\Total ($1,000, 2007)
-        462 data5_24 Commodity credit corporation loans\Total\Amount spent to repay CCC loans (farms, 2007)
         463 data5_25 Commodity credit corporation loans\Total\Amount spent to repay CCC loans ($1,000, 2012)
-        464 data5_26 Commodity credit corporation loans\Total\Amount spent to repay CCC loans ($1,000, 2007)
 
 - 2017:
+    Variables stored under short_desc
+    domain_desc == "TOTAL" 
+    agg_level_desc == "COUNTY" | "NATIONAL" | "STATE", we don't use AMERICAN INDIAN RESERVATION, WATERSHED, or ZIP CODE
 
-    'GOVT PROGRAMS, FEDERAL - RECEIPTS, MEASURED IN $ / OPERATION'
-    'GOVT PROGRAMS, FEDERAL, (EXCL CONSERVATION & WETLANDS) - RECEIPTS, MEASURED IN $ / OPERATION'
-    'INCOME, FARM-RELATED, GOVT PROGRAMS, STATE & LOCAL - RECEIPTS, MEASURED IN $ / OPERATION'
+        'GOVT PROGRAMS, FEDERAL - RECEIPTS, MEASURED IN $ / OPERATION', 
+        'GOVT PROGRAMS, FEDERAL - OPERATIONS WITH RECEIPTS'
+        'GOVT PROGRAMS, FEDERAL - RECEIPTS, MEASURED IN $'
+        'GOVT PROGRAMS, FEDERAL, CONSERVATION & WETLANDS - ACRES'
+        'GOVT PROGRAMS, FEDERAL, CONSERVATION & WETLANDS - NUMBER OF OPERATIONS'
+        'INCOME, FARM-RELATED, GOVT PROGRAMS, STATE & LOCAL - OPERATIONS WITH RECEIPTS'
+        'INCOME, FARM-RELATED, GOVT PROGRAMS, STATE & LOCAL - RECEIPTS, MEASURED IN $'
+        'INCOME, FARM-RELATED, GOVT PROGRAMS, STATE & LOCAL - RECEIPTS, MEASURED IN $ / OPERATION'
+        'GOVT PROGRAMS, FEDERAL, (EXCL CONSERVATION & WETLANDS) - RECEIPTS, MEASURED IN $'
+        'GOVT PROGRAMS, FEDERAL, (EXCL CONSERVATION & WETLANDS) - RECEIPTS, MEASURED IN $ / OPERATION'
+        'GOVT PROGRAMS, FEDERAL, (EXCL CONSERVATION & WETLANDS) - OPERATIONS WITH RECEIPTS'
+        'GOVT PROGRAMS, FEDERAL, CONSERVATION & WETLANDS - RECEIPTS, MEASURED IN $'
+        'GOVT PROGRAMS, FEDERAL, CONSERVATION & WETLANDS - RECEIPTS, MEASURED IN $ / OPERATION'
+        'GOVT PROGRAMS, FEDERAL, CONSERVATION & WETLANDS - OPERATIONS WITH RECEIPTS'
+        'COMMODITY TOTALS, INCL GOVT PROGRAMS - RECEIPTS, MEASURED IN $'
+        'COMMODITY TOTALS, INCL GOVT PROGRAMS - RECEIPTS, MEASURED IN $ / OPERATION'
+        'COMMODITY TOTALS, INCL GOVT PROGRAMS - OPERATIONS WITH RECEIPTS'
+        CCC LOANS - RECEIPTS, MEASURED IN $
+        CCC LOANS - OPERATIONS WITH RECEIPTS
+        CCC LOANS - REPAYMENTS, MEASURED IN $
+        CCC LOANS - OPERATIONS WITH REPAYMENTS
 
-2025-09-18 15:17:21,716 - INFO - All government related SHORT_DESC values in NASS 2017: ['GOVT PROGRAMS, FEDERAL - RECEIPTS, MEASURED IN $ / OPERATION', 'GOVT PROGRAMS, FEDERAL - OPERATIONS WITH RECEIPTS', 'GOVT PROGRAMS, FEDERAL - RECEIPTS, MEASURED IN $', 'GOVT PROGRAMS, FEDERAL, CONSERVATION & WETLANDS - ACRES', 'GOVT PROGRAMS, FEDERAL, CONSERVATION & WETLANDS - NUMBER OF OPERATIONS', 'INCOME, FARM-RELATED, GOVT PROGRAMS, STATE & LOCAL - OPERATIONS WITH RECEIPTS', 'INCOME, FARM-RELATED, GOVT PROGRAMS, STATE & LOCAL - RECEIPTS, MEASURED IN $', 'INCOME, FARM-RELATED, GOVT PROGRAMS, STATE & LOCAL - RECEIPTS, MEASURED IN $ / OPERATION', 'GOVT PROGRAMS, FEDERAL, (EXCL CONSERVATION & WETLANDS) - RECEIPTS, MEASURED IN $', 'GOVT PROGRAMS, FEDERAL, (EXCL CONSERVATION & WETLANDS) - RECEIPTS, MEASURED IN $ / OPERATION', 'GOVT PROGRAMS, FEDERAL, (EXCL CONSERVATION & WETLANDS) - OPERATIONS WITH RECEIPTS', 'GOVT PROGRAMS, FEDERAL, CONSERVATION & WETLANDS - RECEIPTS, MEASURED IN $', 'GOVT PROGRAMS, FEDERAL, CONSERVATION & WETLANDS - RECEIPTS, MEASURED IN $ / OPERATION', 'GOVT PROGRAMS, FEDERAL, CONSERVATION & WETLANDS - OPERATIONS WITH RECEIPTS', 'COMMODITY TOTALS, INCL GOVT PROGRAMS - RECEIPTS, MEASURED IN $', 'COMMODITY TOTALS, INCL GOVT PROGRAMS - RECEIPTS, MEASURED IN $ / OPERATION', 'COMMODITY TOTALS, INCL GOVT PROGRAMS - OPERATIONS WITH RECEIPTS']
-
+    $------- Previous years dont track repayments
 
 - 2022: 
-
-    'GOVT PROGRAMS, FEDERAL - RECEIPTS, MEASURED IN $ / OPERATION'
-    'GOVT PROGRAMS, FEDERAL, (EXCL CONSERVATION & WETLANDS) - RECEIPTS, MEASURED IN $ / OPERATION'
-    'INCOME, FARM-RELATED, GOVT PROGRAMS, STATE & LOCAL - RECEIPTS, MEASURED IN $ / OPERATION'
-
- All government related SHORT_DESC values in NASS 2022: ['COMMODITY TOTALS, INCL GOVT PROGRAMS - OPERATIONS WITH RECEIPTS', 'GOVT PROGRAMS, FEDERAL, CONSERVATION & WETLANDS - NUMBER OF OPERATIONS', 'INCOME, FARM-RELATED, GOVT PROGRAMS, STATE & LOCAL - OPERATIONS WITH RECEIPTS', 'GOVT PROGRAMS, FEDERAL, CONSERVATION & WETLANDS - ACRES', 'COMMODITY TOTALS, INCL GOVT PROGRAMS - RECEIPTS, MEASURED IN $ / OPERATION', 'GOVT PROGRAMS, FEDERAL - RECEIPTS, MEASURED IN $', 'GOVT PROGRAMS, FEDERAL, (EXCL CONSERVATION & WETLANDS) - RECEIPTS, MEASURED IN $', 'GOVT PROGRAMS, FEDERAL - OPERATIONS WITH RECEIPTS', 'COMMODITY TOTALS, INCL GOVT PROGRAMS - RECEIPTS, MEASURED IN $', 'GOVT PROGRAMS, FEDERAL, CONSERVATION & WETLANDS - OPERATIONS WITH RECEIPTS', 'INCOME, FARM-RELATED, GOVT PROGRAMS, STATE & LOCAL - RECEIPTS, MEASURED IN $', 'GOVT PROGRAMS, FEDERAL, CONSERVATION & WETLANDS - RECEIPTS, MEASURED IN $', 'GOVT PROGRAMS, FEDERAL - RECEIPTS, MEASURED IN $ / OPERATION', 'GOVT PROGRAMS, FEDERAL, (EXCL CONSERVATION & WETLANDS) - RECEIPTS, MEASURED IN $ / OPERATION', 'GOVT PROGRAMS, FEDERAL, (EXCL CONSERVATION & WETLANDS) - OPERATIONS WITH RECEIPTS', 'GOVT PROGRAMS, FEDERAL, CONSERVATION & WETLANDS - RECEIPTS, MEASURED IN $ / OPERATION', 'INCOME, FARM-RELATED, GOVT PROGRAMS, STATE & LOCAL - RECEIPTS, MEASURED IN $ / OPERATION']
-
-
+        'COMMODITY TOTALS, INCL GOVT PROGRAMS - OPERATIONS WITH RECEIPTS'
+        'GOVT PROGRAMS, FEDERAL, CONSERVATION & WETLANDS - NUMBER OF OPERATIONS'
+        'INCOME, FARM-RELATED, GOVT PROGRAMS, STATE & LOCAL - OPERATIONS WITH RECEIPTS'
+        'GOVT PROGRAMS, FEDERAL, CONSERVATION & WETLANDS - ACRES'
+        'COMMODITY TOTALS, INCL GOVT PROGRAMS - RECEIPTS, MEASURED IN $ / OPERATION'
+        'GOVT PROGRAMS, FEDERAL - RECEIPTS, MEASURED IN $'
+        'GOVT PROGRAMS, FEDERAL, (EXCL CONSERVATION & WETLANDS) - RECEIPTS, MEASURED IN $'
+        'GOVT PROGRAMS, FEDERAL - OPERATIONS WITH RECEIPTS'
+        'COMMODITY TOTALS, INCL GOVT PROGRAMS - RECEIPTS, MEASURED IN $'
+        'GOVT PROGRAMS, FEDERAL, CONSERVATION & WETLANDS - OPERATIONS WITH RECEIPTS'
+        'INCOME, FARM-RELATED, GOVT PROGRAMS, STATE & LOCAL - RECEIPTS, MEASURED IN $'
+        'GOVT PROGRAMS, FEDERAL, CONSERVATION & WETLANDS - RECEIPTS, MEASURED IN $'
+        'GOVT PROGRAMS, FEDERAL - RECEIPTS, MEASURED IN $ / OPERATION'
+        'GOVT PROGRAMS, FEDERAL, (EXCL CONSERVATION & WETLANDS) - RECEIPTS, MEASURED IN $ / OPERATION'
+        'GOVT PROGRAMS, FEDERAL, (EXCL CONSERVATION & WETLANDS) - OPERATIONS WITH RECEIPTS'
+        'GOVT PROGRAMS, FEDERAL, CONSERVATION & WETLANDS - RECEIPTS, MEASURED IN $ / OPERATION'
+        'INCOME, FARM-RELATED, GOVT PROGRAMS, STATE & LOCAL - RECEIPTS, MEASURED IN $ / OPERATION'
+        CCC LOANS - RECEIPTS, MEASURED IN $
+        CCC LOANS - RECEIPTS, MEASURED IN $ / OPERATION
+        CCC LOANS - OPERATIONS WITH RECEIPTS
+        CCC LOANS - REPAYMENTS, MEASURED IN $
+        CCC LOANS - OPERATIONS WITH REPAYMENTS
 """
 
 import os
@@ -268,17 +270,13 @@ logger = logging.getLogger(__name__)
 # -----------------------------------
 # Config
 # -----------------------------------
-
-# Choose which columns to deflate to real dollars
-DEFLATABLE_COLS = ['gov_payments_avg', 'gov_payments_conservation']
-
 # NASS files (2017–2022)
 NASS_2017_FILE = "/Users/anyamarchenko/CEGA Dropbox/Anya Marchenko/corn/raw/NASS_2017-2022/qs.census2017.txt"
 NASS_2022_FILE = "/Users/anyamarchenko/CEGA Dropbox/Anya Marchenko/corn/raw/NASS_2017-2022/qs.census2022.txt"
 
-# Variable mapping (ICPSR columns and the matching NASS short_desc)
 VARIABLE_MAPPING = {
-    'gov_payments_avg': { # per farm 
+    'gov_pay_total': { # nominal dollars per farm 
+        'deflate': True,
         'icpsr_columns': {
             1992: 'item040012',
             1997: 'item04012',
@@ -286,10 +284,66 @@ VARIABLE_MAPPING = {
             2007: 'data5_5',
             2012: 'data5_5',
         },
-        'nass_short_desc': 'GOVT PROGRAMS, FEDERAL - RECEIPTS, MEASURED IN $ / OPERATION',
-        'description': 'Government payments average per farm'
+        'nass_short_desc': 'GOVT PROGRAMS, FEDERAL - RECEIPTS, MEASURED IN $ / OPERATION'
+    },
+    'gov_pay_conservation': { # nominal dollars per farm 
+        'deflate': True,
+        'icpsr_columns': {
+            1992: 'item040015',
+            1997: 'item04015',
+            2002: 'item05011',
+            2007: 'data5_11',
+            2012: 'data5_11',
+        },
+        'nass_short_desc': 'GOVT PROGRAMS, FEDERAL, CONSERVATION & WETLANDS - RECEIPTS, MEASURED IN $ / OPERATION'
+    },
+    'gov_pay_exc_conservation': { # nominal dollars per farm 
+        'deflate': True,
+        'icpsr_columns': {
+            1992: '',
+            1997: '',
+            2002: '',
+            2007: '',
+            2012: '',
+        },
+        'nass_short_desc': 'GOVT PROGRAMS, FEDERAL, (EXCL CONSERVATION & WETLANDS) - RECEIPTS, MEASURED IN $ / OPERATION'
+    },
+    'gov_pay_other_fed_programs': { # nominal dollars per farm 
+        'deflate': True,
+        'icpsr_columns': {
+            1992: '',
+            1997: '',
+            2002: '',
+            2007: 'data5_17',
+            2012: 'data5_17',
+        },
+        'nass_short_desc': ''
+    }
+    ,
+    'ccc_loans_total_dollars': { # $1,000 
+        'deflate': True,
+        'icpsr_columns': {
+            1992: 'item040031',
+            1997: 'item04031',
+            2002: 'item05021',
+            2007: 'data5_21',
+            2012: 'data5_21',
+        },
+        'nass_short_desc': 'CCC LOANS - RECEIPTS, MEASURED IN $'
+    },
+    'ccc_loans_total_farms': { # farms
+        'deflate': False,
+        'icpsr_columns': {
+            1992: 'item040030',
+            1997: 'item04030',
+            2002: 'item05019',
+            2007: 'data5_19',
+            2012: 'data5_19',
+        },
+        'nass_short_desc': 'CCC LOANS - OPERATIONS WITH RECEIPTS'
     },
     'corn_for_grain_acres': {
+        'deflate': False,
         'icpsr_columns': {
             1992: 'item010058',
             1997: 'item01059',
@@ -297,25 +351,28 @@ VARIABLE_MAPPING = {
             2007: 'data1_63',
             2012: 'data1_64',
         },
-        'nass_short_desc': 'CORN, GRAIN - ACRES HARVESTED',
-        'description': 'Corn for grain acres harvested'
-    },
-    'gov_payments_conservation': { # per farm 
-    'icpsr_columns': {
-        1992: 'item040015',
-        1997: 'item04015',
-        2002: 'item05011',
-        2007: 'data5_11',
-        2012: 'data5_11',
-    },
-    'nass_short_desc': 'GOVT PROGRAMS, FEDERAL, CONSERVATION & WETLANDS - RECEIPTS, MEASURED IN $ / OPERATION',
-    'description': 'Conservation govt payments average per farm'
-}
+        'nass_short_desc': 'CORN, GRAIN - ACRES HARVESTED'
+    }
 }
 
-# -----------------------------------
-# Helpers
-# -----------------------------------
+# Manual calculated columns to create AFTER deflation.
+# Supported ops: 'add' (sum all inputs), 'sub' (first minus the rest).
+# If you want NaNs to be treated as 0 (e.g., add across sparse years), set na_zero=True per spec.
+
+MANUAL_CALCS = [
+    {
+        "name": "gov_pay_exc_conservation_calculated",  # output column name
+        "op": "sub",                                    # 'add' or 'sub'
+        "inputs": ["gov_pay_total_real", "gov_pay_conservation_real"],
+        # "na_zero": False,  # optional (default False). True => treat missing as 0
+    },
+    # Examples:
+    # {"name": "gov_pay_total_plus_ccc_real", "op": "add",
+    #  "inputs": ["gov_pay_total_real", "ccc_loans_total_dollars_real"], "na_zero": True},
+    # {"name": "some_diff_nominal", "op": "sub", "inputs": ["x_nominal", "y_nominal"]}
+]
+
+
 STATE_NAMES = [
     "ALABAMA","ALASKA","ARIZONA","ARKANSAS","CALIFORNIA","COLORADO","CONNECTICUT","DELAWARE",
     "DISTRICT OF COLUMBIA","FLORIDA","GEORGIA","HAWAII","IDAHO","ILLINOIS","INDIANA","IOWA",
@@ -325,6 +382,9 @@ STATE_NAMES = [
     "PENNSYLVANIA","RHODE ISLAND","SOUTH CAROLINA","SOUTH DAKOTA","TENNESSEE","TEXAS","UTAH",
     "VERMONT","VIRGINIA","WASHINGTON","WEST VIRGINIA","WISCONSIN","WYOMING"
 ]
+# -----------------------------------
+# Helpers
+# -----------------------------------
 
 def setup_directories():
     """Create interim directory structure if it doesn't exist."""
@@ -396,6 +456,10 @@ def standardize_geo_names(df: pd.DataFrame) -> pd.DataFrame:
 
     return df
 
+def get_deflatable_cols_from_mapping(mapping: dict) -> list:
+    cols = [k for k, cfg in mapping.items() if isinstance(cfg, dict) and cfg.get('deflate', False)]
+    logger.info(f"Deflatable columns (from VARIABLE_MAPPING): {cols}")
+    return cols
 
 def load_nass_census_data(file_path, year):
     """Load NASS census data TSV."""
@@ -479,13 +543,6 @@ def normalize_fips_after_merge(df: pd.DataFrame) -> pd.DataFrame:
     # Any residual 0s (which imply bad/missing parts) → NA except national
     m_zero_bad = df['fips'].fillna(-1).eq(0) & ~m_nat
     df.loc[m_zero_bad, 'fips'] = pd.NA
-
-    # Optional: enforce state format (2-digit int), county length (4–5 digits) for sanity
-    # (just warnings; comment out if noisy)
-    # bad_state = (m_state) & df['fips'].notna() & ~df['fips'].astype(str).str.len().isin([1,2])
-    # bad_county = (m_county) & df['fips'].notna() & ~df['fips'].astype(str).str.len().isin([4,5])
-    # if bad_state.any(): logger.warning(f"{bad_state.sum()} state rows have non-1/2-digit FIPS")
-    # if bad_county.any(): logger.warning(f"{bad_county.sum()} county rows have non-4/5-digit FIPS")
 
     # Keep nullable Int64
     df['fips'] = df['fips'].astype('Int64')
@@ -605,6 +662,7 @@ def process_nass_census_data(df, year):
         result = result[keep_cols]
     return result
 
+
 def load_deflator_data():
     """Load the BEA price deflator (A191RG) and return year + price_deflator."""
     deflator_path = Path("/Users/anyamarchenko/CEGA Dropbox/Anya Marchenko/corn/raw/deflator/price_index_A191RG_BEA.csv")
@@ -622,6 +680,7 @@ def load_deflator_data():
     except Exception as e:
         logger.error(f"Error loading deflator data: {e}")
         return None
+
 
 def deflate_columns(df, deflator_df, DEFLATABLE_COLS):
     """Deflate specified columns using the price deflator (2017=100)."""
@@ -663,8 +722,10 @@ def get_icpsr_variable_mapping(year):
         'counfip': 'counfip'
     }
     for var_name, var_config in VARIABLE_MAPPING.items():
-        if year in var_config['icpsr_columns']:
-            base_mapping[var_name] = var_config['icpsr_columns'][year]
+        col = var_config['icpsr_columns'].get(year, None)
+        if isinstance(col, str) and col.strip():
+            base_mapping[var_name] = col
+
     if year == 2007:
         base_mapping['counfip'] = 'countyfip'
     elif year == 2012:
@@ -677,7 +738,8 @@ def filter_and_process_data(file_path, year, variable_mapping):
         df = pd.read_csv(file_path, sep='\t', low_memory=False)
         logger.info(f"Loaded {len(df)} rows from {file_path}")
         df_columns_lower = {col.lower(): col for col in df.columns}
-        required_vars = list(variable_mapping.values())
+        required_vars = [v for v in variable_mapping.values()
+                         if isinstance(v, str) and v.strip()]
         available_vars, missing_vars = [], []
 
         for var in required_vars:
@@ -708,7 +770,6 @@ def filter_and_process_data(file_path, year, variable_mapping):
         df_filtered['year'] = year
         cols = ['year'] + [c for c in df_filtered.columns if c != 'year']
         df_filtered = df_filtered[cols]
-        logger.info(f"Filtered to {len(df_filtered)} rows with {len(df_filtered.columns)} columns")
         return df_filtered
     except Exception as e:
         logger.error(f"Error processing {file_path}: {e}")
@@ -813,6 +874,65 @@ def process_nass_data():
 
     return processed
 
+
+import numpy as np  # ensure this is imported
+
+def apply_manual_calculations(df: pd.DataFrame, calcs: list) -> pd.DataFrame:
+    """
+    Apply manual column calculations on df based on 'calcs' specs.
+    Each spec: {"name": str, "op": "add"|"sub", "inputs": [str, ...], "na_zero": bool (optional)}
+      - Coerces inputs to numeric.
+      - By default ('na_zero' False), if any input is NaN the result is NaN (propagate missing).
+      - If 'na_zero' True, missing inputs are treated as 0 for the operation.
+      - 'sub' uses the first input minus the sum of the rest (if any).
+    """
+    out = df.copy()
+
+    for spec in calcs or []:
+        name   = spec.get("name")
+        op     = (spec.get("op") or "").strip().lower()
+        inputs = spec.get("inputs") or []
+        na_zero = bool(spec.get("na_zero", False))
+
+        if not name or op not in {"add", "sub"} or len(inputs) == 0:
+            try:
+                logger.warning(f"Skipping manual calc with invalid spec: {spec}")
+            except Exception:
+                pass
+            continue
+
+        # Build list of Series for inputs; missing columns become NaN Series
+        series_list = []
+        for col in inputs:
+            if col in out.columns:
+                s = pd.to_numeric(out[col], errors="coerce")
+            else:
+                try:
+                    logger.warning(f"Manual calc '{name}': missing input column '{col}'. Filling with NaN.")
+                except Exception:
+                    pass
+                s = pd.Series(np.nan, index=out.index, dtype="float64")
+            series_list.append(s)
+
+        # Optionally treat NaNs as zero
+        if na_zero:
+            series_list = [s.fillna(0.0) for s in series_list]
+
+        # Compute
+        if op == "add":
+            res = series_list[0].copy()
+            for s in series_list[1:]:
+                res = res + s
+        else:  # "sub"
+            res = series_list[0].copy()
+            if len(series_list) > 1:
+                res = res - sum(series_list[1:])
+
+        out[name] = res
+
+    return out
+
+
 def main():
     """Main orchestrator."""
     logger.info("Starting agricultural census data collection...")
@@ -852,17 +972,21 @@ def main():
         merged_df = standardize_geo_names(merged_df)
 
         # Deflate
+        deflatable_cols = get_deflatable_cols_from_mapping(VARIABLE_MAPPING)
         logger.info("Step 4: Applying deflation (1992–2022)...")
-        merged_df_deflated = deflate_columns(merged_df, deflator_df, DEFLATABLE_COLS)
+        merged_df_deflated = deflate_columns(merged_df, deflator_df, deflatable_cols)
+
+        # Build any manual calculated columns (post-deflation)
+        merged_df_deflated = apply_manual_calculations(merged_df_deflated, MANUAL_CALCS)
 
         # Build outputs
         essential_columns = ['year', 'name', 'level', 'fips', 'statefip', 'counfip']
-        real_columns = [f"{c}_real" for c in DEFLATABLE_COLS if f"{c}_real" in merged_df_deflated.columns]
+        real_columns = [c for c in merged_df_deflated.columns if c.endswith('_real')]
         # Exclude price_deflator from deflated dataset
         other_columns = [col for col in merged_df_deflated.columns
                          if col not in essential_columns
                          and not col.endswith('_real')
-                         and col not in DEFLATABLE_COLS
+                         and col not in deflatable_cols
                          and col != 'price_deflator']
 
         # Deflated dataset (NO deflator)
