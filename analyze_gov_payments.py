@@ -117,10 +117,16 @@ def plot_series_simple(years: list[int],
         ax.legend()
 
     if annotate_points:
+        finite = [float(x) for x in series if pd.notna(x) and np.isfinite(x)]
+        if finite and max(finite) <= 1.0 + 1e-9:
+            fmt = "{:.2f}"   # or "{:.1%}" for percent style
+        else:
+            fmt = "{:,.0f}"
         for (y, v) in zip(years, series):
             if pd.notna(v):
-                ax.annotate(f'{v:,.0f}', (y, v), textcoords="offset points", xytext=(0,10),
+                ax.annotate(fmt.format(v), (y, v), textcoords="offset points", xytext=(0,10),
                             ha='center', fontsize=9)
+
 
     plt.tight_layout()
     out_dir = Path(OUTPUT_DIR) / FIGS_DIR
@@ -205,7 +211,7 @@ quick_timeseries(
     df,
     y_col=("share_corn_harvested_acres"),
     title="Share of Acres Harvested per County that are Corn\nAg Census 1992–2022",
-    y_label="Share of harvested acres",
+    y_label="Corn acres as share of all harvested acres",
     geo="county",
     filename="share_corn_harvested_acres.png"
 )
