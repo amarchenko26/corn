@@ -201,6 +201,14 @@ quick_timeseries(
     filename="gov_all_n.png"
 )
 
+quick_timeseries(
+    df,
+    y_col=("share_corn_harvested_acres"),
+    title="Share of Acres Harvested per County that are Corn\nAg Census 1992–2022",
+    y_label="Share of harvested acres",
+    geo="county",
+    filename="share_corn_harvested_acres.png"
+)
 
 # 1) Government payments per farm (real)
 quick_timeseries(

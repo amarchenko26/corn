@@ -4,6 +4,8 @@ import delimited "/Users/anyamarchenko/CEGA Dropbox/Anya Marchenko/corn/raw/NASS
 
 *br if strpos(short_desc, "CONSERVATION") > 0 & agg_level_desc == "COUNTY" & domain_desc =="TOTAL" 
 
+br if strpos(short_desc, "CORN") > 0 & agg_level_desc == "NATIONAL" & domain_desc =="TOTAL" 
+
 *preserve
 
 

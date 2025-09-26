@@ -21,9 +21,16 @@ Census years and corresponding variable names:
         6 counfip County FIPS code
         7 level County=1 state=2 USA=3
 
-        8 flag010001 Flag for item010001
         9 item010001 Farms (number), 1992
+        11 item010002 Land in farms (acres), 1992
+        13 item010003 Average size of farm (acres), 1992
+        35 item010014 Total crop land (acres), 1992
         39 item010016 Harvested crop land (acres), 1992
+
+        45 item010019 Market value of agricultural products sold ($1,000)
+        47 item010020 Market value of agricultural products sold, average per farm (dollars), 1992
+        49 item010021 Market value of agricultural products sold-Crops, including nursery & greenhouse crops ($1,000), 1992
+
         75 item010034 Net cash return from agricultural sales for the farm unit (see text), average per farm (dollars), 1992
 
         121 item010057 Corn for grain or seed (farms), 1992
@@ -62,8 +69,13 @@ Census years and corresponding variable names:
         7 fips State/county FIPS 
 
         8 item01001 Farms (number), 1997
+        21 item01014 Total cropland (farms), 1997
+        22 item01015 Total cropland (acres), 1997
+        23 item01016 Total cropland, harvested cropland (farms), 1997
         24 item01017 Total cropland, harvested cropland (acres), 1997
+
         28 item01021 Market value of agricultural products sold, average per farm ($), 1997 
+        29 item01022 Market value of ag prod sold-crops, incl nursery & greenhouse crops ($1,000), 1997
         42 item01035 Net cash return from ag sales for fm unit (see text) , average per farm ($), 1997
         260 item04003 Net cash return from ag sales for farm unit (see text) ,aver per farm ($), 1997 
 
@@ -118,8 +130,13 @@ Census years and corresponding variable names:
         7 name Name of area
 
         8 item01001 Farms (number, 2002)
+        21 item01014 Total crop land (farms, 2002)
+        22 item01015 Total crop land (acres, 2002)
+        23 item01016 Total crop land, Harvested crop land (farms, 2002)
         24 item01017 Total crop land, Harvested crop land (acres, 2002)
+        27 item01020 Market value of agricultural products sold (see text) ($1,000, 2002)
         28 item01021 Market value of agricultural products sold (see text), Average per farm (dollars, 2002)
+    29 item01022 Market value of agricultural products sold (see text), Crops ($1,000, 2002)
 
         69 item01062 Selected crops harvested, Corn for grain (farms, 2002)
         70 item01063 Selected crops harvested, Corn for grain (acres, 2002)
@@ -152,6 +169,17 @@ Census years and corresponding variable names:
         7 level County=1 state=2 USA=3
         8 data1_1 Farms (number)
 
+        21 data1_14 Total cropland (farms)
+        22 data1_15 Total cropland (acres)
+        23 data1_16 Total cropland\Harvested cropland (farms)
+        24 data1_17 Total cropland\Harvested cropland (acres)
+
+        27 data1_20 Market value of agricultural products sold 2007 ($1,000)
+        28 data1_21 Market value of agricultural products sold 2007\Average per farm
+        (dollars)
+        29 data1_22 Market value of agricultural products sold 2007\Crops, including
+        nursery & greenhouse crops ($1,000)
+
         69 data1_62 Selected crops harvested\Corn for grain (farms)
         70 data1_63 Selected crops harvested\Corn for grain (acres)
         71 data1_64 Selected crops harvested\Corn for grain (bushels)
@@ -181,12 +209,27 @@ Census years and corresponding variable names:
         7 cofips County FIPS code
         8 data1_1 Farms (number)
 
+        22 data1_15 Total cropland (farms)
+        23 data1_16 Total cropland (acres)
+        24 data1_17 Total cropland\Harvested cropland (farms)
+        25 data1_18 Total cropland\Harvested cropland (acres)
+
+        28 data1_21 Market value of agricultural products sold ($1,000)
+        29 data1_22 Market value of agricultural products sold\average per farm ($)
+        30 data1_23 Market value of agricultural products sold\Crops, including nursery & greenhouse
+        crops ($1,000)
+
         70 data1_63 Selected crops harvested\Corn for grain (farms)
         71 data1_64 Selected crops harvested\Corn for grain (acres)
         72 data1_65 Selected crops harvested\Corn for grain (bushels)
         73 data1_66 Selected crops harvested\Corn for silage or greenchop (farms)
         74 data1_67 Selected crops harvested\Corn for silage or greenchop (acres)
         75 data1_68 Selected crops harvested\Corn for silage or greenchop (tons)
+
+        201 data2_55 Total sales\Crops,(farms, 2012)
+        203 data2_57 Total sales\Crops,($1,000, 2012)
+        209 data2_63 Total sales\Crops,Corn (farms, 2012)
+        211 data2_65 Total sales\Crops,Corn ($1,000, 2012)
 
         439 data5_1 Government payments\Total received (farms, 2012)
         441 data5_3 Government payments\Total received ($1,000, 2012)
@@ -288,6 +331,66 @@ VARIABLE_MAPPING = {
             2012: 'data1_1',
         },
         'nass_short_desc': 'FARM OPERATIONS - NUMBER OF OPERATIONS'
+    },
+    'crop_acres': {   #total cropland in acres
+        'deflate': False,
+        'icpsr_in_thousands': False,
+        'icpsr_columns': {
+            1992: 'item010014',
+            1997: 'item01015',
+            2002: 'item01015',
+            2007: 'data1_15',
+            2012: 'data1_16',
+        },
+        'nass_short_desc': 'AG LAND, CROPLAND - ACRES'
+    },
+    'harvested_acres': {  #harvested cropland in acres
+        'deflate': False,
+        'icpsr_in_thousands': False,
+        'icpsr_columns': {
+            1992: 'item010016',
+            1997: 'item01017',
+            2002: 'item01017',
+            2007: 'data1_17',
+            2012: 'data1_18',
+        },
+        'nass_short_desc': 'AG LAND, CROPLAND, HARVESTED - ACRES'
+    },
+    'corn_for_grain_acres': { # corn for grain in acres, should be harvested
+        'deflate': False,
+        'icpsr_in_thousands': False,
+        'icpsr_columns': {
+            1992: 'item010058',
+            1997: 'item01059',
+            2002: 'item01063',
+            2007: 'data1_63',
+            2012: 'data1_64',
+        },
+        'nass_short_desc': 'CORN, GRAIN - ACRES HARVESTED'
+    },
+    'corn_for_grain_bu': { #corn for grain in bushels, harvested 
+        'deflate': False,
+        'icpsr_in_thousands': False,
+        'icpsr_columns': {
+            1992: 'item010059',
+            1997: 'item01060',
+            2002: 'item01064',
+            2007: 'data1_64',
+            2012: 'data1_65',
+        },
+        'nass_short_desc': 'CORN, GRAIN - PRODUCTION, MEASURED IN BU'
+    },
+    'corn_for_silage_acres': { #no bushels version of this, acres harvested 
+        'deflate': False,
+        'icpsr_in_thousands': False,
+        'icpsr_columns': {
+            1992: 'item010061',
+            1997: 'item01062',
+            2002: 'item01066',
+            2007: 'data1_66',
+            2012: 'data1_67',
+        },
+        'nass_short_desc': 'CORN, SILAGE - ACRES HARVESTED'
     },
     'gov_all_pf': { # nominal dollars per farm 
         'deflate': True,
@@ -409,18 +512,6 @@ VARIABLE_MAPPING = {
             2012: 'data5_19',
         },
         'nass_short_desc': 'CCC LOANS - OPERATIONS WITH RECEIPTS'
-    },
-    'corn_for_grain_acres': {
-        'deflate': False,
-        'icpsr_in_thousands': False,
-        'icpsr_columns': {
-            1992: 'item010058',
-            1997: 'item01059',
-            2002: 'item01063',
-            2007: 'data1_63',
-            2012: 'data1_64',
-        },
-        'nass_short_desc': 'CORN, GRAIN - ACRES HARVESTED'
     }
 }
 
@@ -445,6 +536,18 @@ MANUAL_CALCS = [
         "name": "ccc_loan_pf_real",
         "op": "div",
         "inputs": ["ccc_loan_amt", "ccc_loan_n"],  # numerator / denominator
+        "na_zero": False
+    },
+    {
+        "name": "total_corn_harvested_acres",
+        "op": "add",
+        "inputs": ["corn_for_grain_acres", "corn_for_silage_acres"], 
+        "na_zero": False
+    },
+    {
+        "name": "share_corn_harvested_acres",
+        "op": "div",
+        "inputs": ["total_corn_harvested_acres", "harvested_acres"], 
         "na_zero": False
     }
 ]
