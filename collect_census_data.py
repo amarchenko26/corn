@@ -261,6 +261,7 @@ import pandas as pd
 from pathlib import Path
 import logging
 import numpy as np
+import re 
 
 # -----------------------------------
 # Logging
@@ -276,8 +277,21 @@ NASS_2017_FILE = "/Users/anyamarchenko/CEGA Dropbox/Anya Marchenko/corn/raw/NASS
 NASS_2022_FILE = "/Users/anyamarchenko/CEGA Dropbox/Anya Marchenko/corn/raw/NASS_2017-2022/qs.census2022.txt"
 
 VARIABLE_MAPPING = {
+    'farms_n': {  
+        'deflate': False,
+        'icpsr_in_thousands': False,
+        'icpsr_columns': {
+            1992: 'item010001',
+            1997: 'item01001',
+            2002: 'item01001',
+            2007: 'data1_1',
+            2012: 'data1_1',
+        },
+        'nass_short_desc': 'FARM OPERATIONS - NUMBER OF OPERATIONS'
+    },
     'gov_all_pf': { # nominal dollars per farm 
         'deflate': True,
+        'icpsr_in_thousands': False,
         'icpsr_columns': {
             1992: 'item040012',
             1997: 'item04012',
@@ -289,6 +303,7 @@ VARIABLE_MAPPING = {
     },
     'gov_all_n': { # farms with receipts
         'deflate': False,
+        'icpsr_in_thousands': False,
         'icpsr_columns': {
             1992: 'item040010',
             1997: 'item04010',
@@ -300,6 +315,7 @@ VARIABLE_MAPPING = {
     },
     'gov_all_amt': { # total nominal dollars 
         'deflate': True,
+        'icpsr_in_thousands': True,
         'icpsr_columns': {
             1992: 'item040011',
             1997: 'item04011',
@@ -311,6 +327,7 @@ VARIABLE_MAPPING = {
     },
     'gov_cons_pf': { # nominal dollars per farm in conservation payments 
         'deflate': True,
+        'icpsr_in_thousands': False,
         'icpsr_columns': {
             1992: 'item040015',
             1997: 'item04015',
@@ -322,6 +339,7 @@ VARIABLE_MAPPING = {
     },
     'gov_cons_amt': { # total nominal dollars 
         'deflate': True,
+        'icpsr_in_thousands': True,
         'icpsr_columns': {
             1992: 'item040014',
             1997: 'item04014',
@@ -333,6 +351,7 @@ VARIABLE_MAPPING = {
     },
     'gov_cons_n': { # farms with receipts
         'deflate': False,
+        'icpsr_in_thousands': False,
         'icpsr_columns': {
             1992: 'item040013',
             1997: 'item04013',
@@ -342,8 +361,9 @@ VARIABLE_MAPPING = {
         },
         'nass_short_desc': 'GOVT PROGRAMS, FEDERAL, CONSERVATION & WETLANDS - OPERATIONS WITH RECEIPTS'
     },
-    'gov_exc_cons_pf': { # nominal dollars per farm
+    'gov_noncons_pf': { # nominal dollars per farm
         'deflate': True,
+        'icpsr_in_thousands': False,
         'icpsr_columns': {
             1992: '',
             1997: '',
@@ -355,6 +375,7 @@ VARIABLE_MAPPING = {
     },
     'gov_other_pay_pf': { # nominal dollars per farm 
         'deflate': True,
+        'icpsr_in_thousands': False,
         'icpsr_columns': {
             1992: '',
             1997: '',
@@ -367,6 +388,7 @@ VARIABLE_MAPPING = {
     ,
     'ccc_loan_amt': { # $1,000 in loans  
         'deflate': True,
+        'icpsr_in_thousands': True,
         'icpsr_columns': {
             1992: 'item040031',
             1997: 'item04031',
@@ -378,6 +400,7 @@ VARIABLE_MAPPING = {
     },
     'ccc_loan_n': { # total farms receiving loans 
         'deflate': False,
+        'icpsr_in_thousands': False,
         'icpsr_columns': {
             1992: 'item040030',
             1997: 'item04030',
@@ -389,6 +412,7 @@ VARIABLE_MAPPING = {
     },
     'corn_for_grain_acres': {
         'deflate': False,
+        'icpsr_in_thousands': False,
         'icpsr_columns': {
             1992: 'item010058',
             1997: 'item01059',
@@ -406,16 +430,25 @@ VARIABLE_MAPPING = {
 
 MANUAL_CALCS = [
     {
-        "name": "gov_exc_cons_pf_calc",  # output column name
-        "op": "sub",                                    # 'add' or 'sub'
-        "inputs": ["gov_all_pf_real", "gov_cons_pf_real"],  # input columns
-        # "na_zero": False,  # optional (default False). True => treat missing as 0
+        "name": "gov_noncons_amt_calc",
+        "op": "sub",
+        "inputs": ["gov_all_amt_real", "gov_cons_amt_real"],
+        "na_zero": True
     },
-    # Examples:
-    # {"name": "gov_pay_total_plus_ccc_real", "op": "add",
-    #  "inputs": ["gov_pay_total_real", "ccc_loans_total_dollars_real"], "na_zero": True},
-    # {"name": "some_diff_nominal", "op": "sub", "inputs": ["x_nominal", "y_nominal"]}
+    {
+        "name": "gov_noncons_pf_calc_real",
+        "op": "div",
+        "inputs": ["gov_noncons_amt_calc", "gov_all_n"],  # numerator / denominator
+        "na_zero": False
+    },
+    {
+        "name": "ccc_loan_pf_real",
+        "op": "div",
+        "inputs": ["ccc_loan_amt", "ccc_loan_n"],  # numerator / denominator
+        "na_zero": False
+    }
 ]
+
 
 
 STATE_NAMES = [
@@ -439,8 +472,15 @@ def setup_directories():
         (interim_dir / str(year)).mkdir(exist_ok=True)
     return interim_dir
 
+def _as_number(series: pd.Series) -> pd.Series:
+    """Coerce strings like '$1,234' or '1,234.5' to float; keep NaNs."""
+    return (
+        series.astype(str)
+              .str.replace(r'[^\d\.\-]', '', regex=True)
+              .replace('', np.nan)
+              .astype(float)
+    )
 
-import re
 
 def _strip_state_prefix(raw: str) -> str:
     """
@@ -500,11 +540,6 @@ def standardize_geo_names(df: pd.DataFrame) -> pd.DataFrame:
     df.loc[m_us, 'name'] = 'UNITED STATES'
 
     return df
-
-def get_deflatable_cols_from_mapping(mapping: dict) -> list:
-    cols = [k for k, cfg in mapping.items() if isinstance(cfg, dict) and cfg.get('deflate', False)]
-    logger.info(f"Deflatable columns (from VARIABLE_MAPPING): {cols}")
-    return cols
 
 def load_nass_census_data(file_path, year):
     """Load NASS census data TSV."""
@@ -727,8 +762,8 @@ def load_deflator_data():
         return None
 
 
-def deflate_columns(df, deflator_df, DEFLATABLE_COLS):
-    """Deflate specified columns using the price deflator (2017=100)."""
+def deflate_columns(df, deflator_df, variable_mapping: dict):
+    """Deflate columns flagged in `variable_mapping` using the price deflator (2017=100)."""
     logger.info("Deflating monetary columns to 2017 dollars...")
     df_with_deflator = df.merge(deflator_df, on='year', how='left')
 
@@ -739,8 +774,14 @@ def deflate_columns(df, deflator_df, DEFLATABLE_COLS):
         missing_years = df_with_deflator[df_with_deflator['price_deflator'].isna()]['year'].unique()
         logger.info(f"Missing years: {missing_years}")
 
+    deflatable_cols = [
+        name for name, cfg in (variable_mapping or {}).items()
+        if isinstance(cfg, dict) and cfg.get('deflate')
+    ]
+    logger.info(f"Deflatable columns (from VARIABLE_MAPPING): {deflatable_cols}")
+
     # compute real columns
-    for col in DEFLATABLE_COLS:
+    for col in deflatable_cols:
         if col in df_with_deflator.columns:
             df_with_deflator[col] = (
                 df_with_deflator[col]
@@ -777,16 +818,22 @@ def get_icpsr_variable_mapping(year):
         base_mapping['counfip'] = 'cofips'
     return base_mapping
 
-def filter_and_process_data(file_path, year, variable_mapping):
-    """Select variables by mapping and attach year column (ICPSR files)."""
+def filter_and_process_data(file_path, year, variable_mapping, full_variable_specs=VARIABLE_MAPPING):
+    """Select variables by mapping and attach year column (ICPSR files).
+       Also: scale ICPSR 'in thousands' fields to dollars immediately.
+    """
     try:
         df = pd.read_csv(file_path, sep='\t', low_memory=False)
         logger.info(f"Loaded {len(df)} rows from {file_path}")
+
+        # map of lowercase -> actual column name in file
         df_columns_lower = {col.lower(): col for col in df.columns}
+
+        # which raw vars do we need for this year?
         required_vars = [v for v in variable_mapping.values()
                          if isinstance(v, str) and v.strip()]
-        available_vars, missing_vars = [], []
 
+        available_vars, missing_vars = [], []
         for var in required_vars:
             var_lower = var.lower()
             if var_lower in df_columns_lower:
@@ -803,22 +850,43 @@ def filter_and_process_data(file_path, year, variable_mapping):
             logger.error(f"No required variables found in {year}")
             return None
 
+        # keep only what we need, then rename to standardized names
         df_filtered = df[available_vars].copy()
 
         actual_to_standard = {}
         for standard_name, original_var in variable_mapping.items():
+            if not isinstance(original_var, str) or not original_var.strip():
+                continue
             original_var_lower = original_var.lower()
             if original_var_lower in df_columns_lower:
                 actual_to_standard[df_columns_lower[original_var_lower]] = standard_name
 
         df_filtered = df_filtered.rename(columns=actual_to_standard)
+
+        # Attach year
         df_filtered['year'] = year
         cols = ['year'] + [c for c in df_filtered.columns if c != 'year']
         df_filtered = df_filtered[cols]
+
+        # ---- NEW: scale ICPSR fields that are "in thousands" to dollars ----
+        # We only touch variables that (a) are present in this df and (b) are flagged icpsr_in_thousands=True
+        # This happens early so all downstream logic sees standardized $ units.
+        for var_name, spec in (full_variable_specs or {}).items():
+            if not isinstance(spec, dict):
+                continue
+            if spec.get('icpsr_in_thousands') and (var_name in df_filtered.columns):
+                before_nonnull = df_filtered[var_name].notna().sum()
+                df_filtered[var_name] = _as_number(df_filtered[var_name]) * 1000.0
+                logger.info(f"[{year}] Scaled '{var_name}' from thousands to dollars "
+                            f"({before_nonnull} non-missing values).")
+            # If not in_thousands but numeric-like, we leave as-is to avoid surprising changes.
+
         return df_filtered
+
     except Exception as e:
         logger.error(f"Error processing {file_path}: {e}")
         return None
+
 
 def collect_census_files():
     """Process ICPSR (1992–2012) files and write merged outputs for those years."""
@@ -832,7 +900,6 @@ def collect_census_files():
         logger.error("Failed to load deflator data. Exiting.")
         return [], [{'error': 'Failed to load deflator data'}]
 
-    logger.info(f"Columns to deflate: {DEFLATABLE_COLS}")
     interim_dir = setup_directories()
 
     collected_files, missing_files, processed_dataframes = [], [], []
@@ -849,7 +916,7 @@ def collect_census_files():
 
         try:
             variable_mapping = get_icpsr_variable_mapping(year)
-            df_filtered = filter_and_process_data(source_file, year, variable_mapping)
+            df_filtered = filter_and_process_data(source_file, year, variable_mapping, full_variable_specs=VARIABLE_MAPPING)
             if df_filtered is None:
                 missing_files.append({'folder': folder, 'year': year, 'error': 'Failed to process data'})
                 continue
@@ -920,16 +987,21 @@ def process_nass_data():
     return processed
 
 
-import numpy as np  # ensure this is imported
-
 def apply_manual_calculations(df: pd.DataFrame, calcs: list) -> pd.DataFrame:
     """
     Apply manual column calculations on df based on 'calcs' specs.
-    Each spec: {"name": str, "op": "add"|"sub", "inputs": [str, ...], "na_zero": bool (optional)}
-      - Coerces inputs to numeric.
-      - By default ('na_zero' False), if any input is NaN the result is NaN (propagate missing).
-      - If 'na_zero' True, missing inputs are treated as 0 for the operation.
-      - 'sub' uses the first input minus the sum of the rest (if any).
+    Supported ops: 'add', 'sub', 'div'.
+    Each spec:
+      {
+        "name": str,
+        "op": "add"|"sub"|"div",
+        "inputs": [str, ...],
+        "na_zero": bool (optional)
+      }
+    Notes:
+      - 'sub': first input minus sum of the rest
+      - 'div': first input divided by second (ignores others if >2)
+      - if 'na_zero' True: NaNs in inputs are treated as 0
     """
     out = df.copy()
 
@@ -939,39 +1011,37 @@ def apply_manual_calculations(df: pd.DataFrame, calcs: list) -> pd.DataFrame:
         inputs = spec.get("inputs") or []
         na_zero = bool(spec.get("na_zero", False))
 
-        if not name or op not in {"add", "sub"} or len(inputs) == 0:
-            try:
-                logger.warning(f"Skipping manual calc with invalid spec: {spec}")
-            except Exception:
-                pass
+        if not name or op not in {"add", "sub", "div"} or len(inputs) == 0:
+            logger.warning(f"Skipping manual calc with invalid spec: {spec}")
             continue
 
-        # Build list of Series for inputs; missing columns become NaN Series
+        # collect inputs (fall back to NaN if missing)
         series_list = []
         for col in inputs:
             if col in out.columns:
                 s = pd.to_numeric(out[col], errors="coerce")
             else:
-                try:
-                    logger.warning(f"Manual calc '{name}': missing input column '{col}'. Filling with NaN.")
-                except Exception:
-                    pass
+                logger.warning(f"Manual calc '{name}': missing input column '{col}'. Filling with NaN.")
                 s = pd.Series(np.nan, index=out.index, dtype="float64")
             series_list.append(s)
 
-        # Optionally treat NaNs as zero
         if na_zero:
             series_list = [s.fillna(0.0) for s in series_list]
 
-        # Compute
+        # compute
         if op == "add":
+            res = sum(series_list)
+        elif op == "sub":
             res = series_list[0].copy()
             for s in series_list[1:]:
-                res = res + s
-        else:  # "sub"
-            res = series_list[0].copy()
-            if len(series_list) > 1:
-                res = res - sum(series_list[1:])
+                res = res - s
+        elif op == "div":
+            num = series_list[0]
+            denom = series_list[1] if len(series_list) > 1 else np.nan
+            res = num / denom.replace({0: np.nan})  # avoid div by zero
+        else:
+            logger.warning(f"Unsupported op: {op}")
+            continue
 
         out[name] = res
 
@@ -1017,21 +1087,24 @@ def main():
         merged_df = standardize_geo_names(merged_df)
 
         # Deflate
-        deflatable_cols = get_deflatable_cols_from_mapping(VARIABLE_MAPPING)
         logger.info("Step 4: Applying deflation (1992–2022)...")
-        merged_df_deflated = deflate_columns(merged_df, deflator_df, deflatable_cols)
+        merged_df_deflated = deflate_columns(merged_df, deflator_df, VARIABLE_MAPPING)
 
         # Build any manual calculated columns (post-deflation)
         merged_df_deflated = apply_manual_calculations(merged_df_deflated, MANUAL_CALCS)
 
         # Build outputs
         essential_columns = ['year', 'name', 'level', 'fips', 'statefip', 'counfip']
+        deflatable_vars = {
+            name for name, cfg in VARIABLE_MAPPING.items()
+            if isinstance(cfg, dict) and cfg.get('deflate')
+        }
         real_columns = [c for c in merged_df_deflated.columns if c.endswith('_real')]
         # Exclude price_deflator from deflated dataset
         other_columns = [col for col in merged_df_deflated.columns
                          if col not in essential_columns
                          and not col.endswith('_real')
-                         and col not in deflatable_cols
+                         and col not in deflatable_vars
                          and col != 'price_deflator']
 
         # Deflated dataset (NO deflator)
