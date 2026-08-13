@@ -180,6 +180,9 @@ print(bot.to_string(index=False))
 # ============================================================
 # EXPORT
 # ============================================================
+dupes = df[df.duplicated('product_module_code', keep=False)]['product_module_code'].unique()
+assert len(dupes) == 0, f"Duplicate product_module_codes before export: {dupes.tolist()}"
+
 out_path = OUT_DIR / 'variety_healthiness_module.dta'
 df.drop(columns=['rationale']).to_stata(str(out_path), write_index=False)
 print(f"\nSaved {out_path}")

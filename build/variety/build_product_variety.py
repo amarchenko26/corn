@@ -32,6 +32,9 @@ import tempfile
 import pandas as pd
 import numpy as np
 from pathlib import Path
+import os, sys
+# repo reorganized into stage folders: reach shared utils/ for food_filters
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..', 'utils'))
 from food_filters import DROP_DEPARTMENTS_PRE_2021, DROP_PRODUCT_GROUPS, DROP_PRODUCT_MODULES
 
 # ============================================================

@@ -11,8 +11,15 @@ Handles:
   - Income code change: codes 28/29/30 only exist 2006-2009, so all codes
     >= 27 are collapsed to "$100,000+" with a single midpoint for consistency
 
+Also builds HOUSEHOLD LABOR-SUPPLY measures (see add_labor_supply_measures)
+and keeps the Member_1..7 fields. See LABOR_SUPPLY.md for the full definitions,
+the Nielsen head/member data-structure caveats, and how these feed build_hi.do.
+
 Output:
-  - interim/panelists/panelists_all_years.parquet
+  - interim/panelists/panelists_all_years.parquet  (+ .dta)  HH x year, enriched
+  - interim/panelists/panelist_heads_long.parquet            HH x year x role
+        (male_head / female_head / partner) with FT/PT/NE status and
+        year-over-year transitions — the panel for the labor-supply event study
 """
 
 import os
@@ -44,7 +51,9 @@ KEEP_COLS = [
     'marital_status', 'race', 'hispanic_origin',
     'panelist_zip_code', 'fips_state_code', 'fips_county_code',
     'region_code', 'wic_indicator_current', 'wic_indicator_ever_not_current',
-]
+] + [f'member_{i}_{suf}'
+     for i in range(1, 8)
+     for suf in ('birth', 'relationship_sex', 'employment')]
 
 # CamelCase → snake_case mapping for pre-2021 columns that differ
 COLUMN_RENAME = {
@@ -185,8 +194,143 @@ HISPANIC_ORIGIN_LABEL = {
 # Numeric scales for combining male/female head variables (Allcott-style)
 # Code 0 = No Head → NaN (person doesn't exist, excluded from mean)
 EDUC_YEARS = {0: np.nan, 1: 6, 2: 10, 3: 12, 4: 14, 5: 16, 6: 18}
-# Employment → hours per week worked; code 9 (Not Employed) = 0 hrs
-EMPLOY_HOURS = {0: np.nan, 1: 24, 2: 32, 3: 40, 9: 0}
+# Employment → hours per week worked; code 9 (Not Employed) = 0 hrs; code 1 uses BLS part-time avg
+EMPLOY_HOURS = {0: np.nan, 1: 20, 2: 32, 3: 40, 9: 0}
+# Conditional on working: code 9 excluded (NaN)
+EMPLOY_HOURS_IF_EMPLOYED = {0: np.nan, 1: 20, 2: 32, 3: 40, 9: np.nan}
+# For a household SUM, an absent head (code 0) contributes 0 hours, not NaN
+EMPLOY_HOURS_SUM = {0: 0, 1: 20, 2: 32, 3: 40, 9: 0}
+
+# --- Non-head member fields (for recovering an unmarked partner's labor) -----
+# Member_N_Relationship_Sex codes (Kilts NielsenIQ manual):
+#   1 Son  2 Daughter  3 Other Male Relative  4 Other Female Relative
+#   5 Male Not Related  6 Female Not Related  blank = No Member / Unknown
+# There is NO spouse/partner code, so a non-head partner is indistinguishable
+# from an aunt/parent (3/4) or roommate (5/6). We proxy "partner" as an
+# opposite-sex, spouse-aged, adult NON-CHILD member in a single-head household.
+MEMBER_ADULT_FEMALE_CODES = {4, 6}   # exclude Daughter (2)
+MEMBER_ADULT_MALE_CODES   = {3, 5}   # exclude Son (1)
+PARTNER_AGE_WINDOW = 15              # yrs from head's (binned) age to count as spouse-like
+# Member_N_Employment is BINARY (1 = employed / blank only) — no hours detail.
+
+# Head binned-age code → representative age, for spouse-age matching
+HEAD_AGE_MID = {1: 22, 2: 27, 3: 32, 4: 37, 5: 42, 6: 47, 7: 52, 8: 60, 9: 70}
+
+
+def head_status(code):
+    """Head employment code → FT / PT / NE status (None if no such head)."""
+    if code == 3:      return 'FT'   # 35+ hours
+    if code in (1, 2): return 'PT'   # under 35 hours
+    if code == 9:      return 'NE'   # not employed for pay
+    return None                      # 0 / missing / no head
+
+
+def add_labor_supply_measures(df):
+    """
+    Build household labor-supply measures and a head/adult-level long panel.
+
+    Heads (intensive margin, from hours bins):
+      {male,female}_head_status     FT / PT / NE / <NA>
+      {male,female}_head_employed   1 / 0 / <NA>
+    Household extensive margin (counts of earning adults):
+      n_heads                 number of designated heads (1 or 2, self-reported)
+      n_head_earners          employed heads (0/1/2)
+      hh_total_workhours      summed head hours (absent head = 0 hrs)
+      has_recovered_partner   an opposite-sex, spouse-aged (+/-15 yrs), adult
+                              NON-CHILD member in a SINGLE-head HH — the partner
+                              the household declined to mark as a head
+      n_recovered_partner_earners  employed such members (binary employment only)
+      n_earners_total         n_head_earners + recovered partner earners
+
+    Returns (df, heads_long). heads_long has one row per household x year x role
+    (male_head / female_head / partner) with status, employed, and year-over-year
+    `transition` (e.g. 'FT->PT'). Transitions are computed for heads only — the
+    two head slots are stable across years, but member slots are not, so partner
+    identity cannot be tracked over time.
+    """
+    yr = pd.to_numeric(df['panel_year'], errors='coerce')
+
+    # --- heads: status, employed indicator, presence, summed hours ---------
+    for sex in ['male', 'female']:
+        emp = pd.to_numeric(df[f'{sex}_head_employment'], errors='coerce')
+        df[f'{sex}_head_status']   = emp.map(head_status).astype('object')
+        df[f'{sex}_head_employed'] = emp.map(
+            lambda x: np.nan if (pd.isna(x) or x == 0) else (0.0 if x == 9 else 1.0))
+        df[f'_{sex}_hrs']     = emp.map(EMPLOY_HOURS_SUM)
+        df[f'_{sex}_present'] = pd.to_numeric(df[f'{sex}_head_age'], errors='coerce') > 0
+
+    df['n_heads'] = df['_male_present'].astype(int) + df['_female_present'].astype(int)
+    df['n_head_earners'] = df[['male_head_employed', 'female_head_employed']].sum(axis=1, min_count=1)
+    df['hh_total_workhours'] = df[['_male_hrs', '_female_hrs']].sum(axis=1, min_count=1)
+
+    # --- recover an unmarked partner (single-head households only) ----------
+    single = df['n_heads'] == 1
+    head_is_male   = single & df['_male_present']
+    head_is_female = single & df['_female_present']
+    # single head's binned-age midpoint (whichever head exists)
+    head_age_code = df['male_head_age'].where(df['_male_present'], df['female_head_age'])
+    head_age_code = pd.to_numeric(head_age_code, errors='coerce')
+    head_age_mid  = head_age_code.map(lambda v: HEAD_AGE_MID.get(int(v)) if pd.notna(v) else np.nan)
+
+    has_partner       = pd.Series(False, index=df.index)
+    n_partner_earners = pd.Series(0.0, index=df.index)
+    partner_sex       = pd.Series(np.nan, index=df.index, dtype='object')
+    for i in range(1, 8):
+        rc, bc, ec = (f'member_{i}_relationship_sex', f'member_{i}_birth', f'member_{i}_employment')
+        if rc not in df.columns:
+            continue
+        rel  = pd.to_numeric(df[rc], errors='coerce')
+        mage = yr - pd.to_numeric(df[bc], errors='coerce')
+        memp = pd.to_numeric(df[ec], errors='coerce')
+        opp_female = head_is_male   & rel.isin(MEMBER_ADULT_FEMALE_CODES)
+        opp_male   = head_is_female & rel.isin(MEMBER_ADULT_MALE_CODES)
+        q = ((opp_female | opp_male)
+             & (mage >= 18)
+             & ((mage - head_age_mid).abs() <= PARTNER_AGE_WINDOW)).fillna(False)
+        has_partner       |= q
+        n_partner_earners += (q & (memp == 1)).astype(float)
+        take = q & partner_sex.isna()
+        partner_sex = partner_sex.mask(take, np.where(opp_female.fillna(False), 'F', 'M'))
+
+    df['has_recovered_partner']       = has_partner
+    df['recovered_partner_sex']       = partner_sex
+    df['n_recovered_partner_earners'] = np.where(has_partner, n_partner_earners, np.nan)
+    df['n_earners_total']             = df['n_head_earners'].fillna(0) + n_partner_earners
+
+    # --- head/adult-level LONG panel (transitions for event study) ---------
+    long_frames = []
+    for sex, s in [('male', 'M'), ('female', 'F')]:
+        present = df[f'{sex}_head_employed'].notna()
+        sub = df.loc[present, ['household_code', 'panel_year']].copy()
+        sub['role']     = f'{sex}_head'
+        sub['sex']      = s
+        sub['status']   = df.loc[present, f'{sex}_head_status']
+        sub['employed'] = df.loc[present, f'{sex}_head_employed']
+        sub['margin']   = 'intensive'
+        long_frames.append(sub)
+    pp = has_partner
+    sub = df.loc[pp, ['household_code', 'panel_year']].copy()
+    sub['sex']      = df.loc[pp, 'recovered_partner_sex']
+    sub['role']     = 'partner'
+    sub['employed'] = (n_partner_earners[pp] > 0).astype(float)
+    sub['status']   = np.where(sub['employed'] == 1, 'employed', 'not_employed')
+    sub['margin']   = 'extensive'
+    long_frames.append(sub)
+
+    heads_long = pd.concat(long_frames, ignore_index=True)
+    heads_long = heads_long.sort_values(['household_code', 'role', 'panel_year'])
+    is_head = heads_long['role'].isin(['male_head', 'female_head'])
+    heads_long['status_lag'] = heads_long.groupby(['household_code', 'role'])['status'].shift()
+    heads_long.loc[~is_head, 'status_lag'] = np.nan   # member slots not stable across years
+    heads_long['transition'] = np.where(
+        heads_long['status_lag'].notna() & heads_long['status'].notna(),
+        heads_long['status_lag'].astype(str) + '->' + heads_long['status'].astype(str),
+        np.nan)
+
+    df.drop(columns=[c for c in df.columns
+                     if c.startswith('_male_') or c.startswith('_female_')],
+            inplace=True, errors='ignore')
+    return df, heads_long
 
 
 # ============================================================================
@@ -342,22 +486,40 @@ def main():
         col = f'{sex}_head_employment'
         if col in panelists.columns:
             emp = pd.to_numeric(panelists[col], errors='coerce')
-            panelists[f'_{sex}_work_hours'] = emp.map(EMPLOY_HOURS)
-            panelists[f'_{sex}_employed']   = emp.map(
+            panelists[f'_{sex}_work_hours']         = emp.map(EMPLOY_HOURS)
+            panelists[f'_{sex}_work_hours_if_empl'] = emp.map(EMPLOY_HOURS_IF_EMPLOYED)
+            panelists[f'_{sex}_employed']           = emp.map(
                 lambda x: np.nan if (pd.isna(x) or x == 0) else (0.0 if x == 9 else 1.0))
     if '_male_work_hours' in panelists.columns and '_female_work_hours' in panelists.columns:
-        panelists['hh_avg_workhours'] = panelists[['_male_work_hours', '_female_work_hours']].mean(axis=1)
-        panelists['hh_employed']  = panelists[['_male_employed',   '_female_employed']].mean(axis=1)
+        panelists['hh_avg_workhours']             = panelists[['_male_work_hours', '_female_work_hours']].mean(axis=1)
+        panelists['hh_avg_workhours_if_employed'] = panelists[['_male_work_hours_if_empl', '_female_work_hours_if_empl']].mean(axis=1)
+        panelists['hh_employed']                  = panelists[['_male_employed', '_female_employed']].mean(axis=1)
     elif '_male_work_hours' in panelists.columns:
-        panelists['hh_avg_workhours'] = panelists['_male_work_hours']
-        panelists['hh_employed']  = panelists['_male_employed']
+        panelists['hh_avg_workhours']             = panelists['_male_work_hours']
+        panelists['hh_avg_workhours_if_employed'] = panelists['_male_work_hours_if_empl']
+        panelists['hh_employed']                  = panelists['_male_employed']
     elif '_female_work_hours' in panelists.columns:
-        panelists['hh_avg_workhours'] = panelists['_female_work_hours']
-        panelists['hh_employed']  = panelists['_female_employed']
+        panelists['hh_avg_workhours']             = panelists['_female_work_hours']
+        panelists['hh_avg_workhours_if_employed'] = panelists['_female_work_hours_if_empl']
+        panelists['hh_employed']                  = panelists['_female_employed']
 
     # Drop intermediate columns
     drop_cols = [c for c in panelists.columns if c.startswith('_male_') or c.startswith('_female_')]
     panelists.drop(columns=drop_cols, inplace=True)
+
+    # ------------------------------------------------------------------
+    # Labor-supply measures (head FT/PT/NE + recovered-partner extensive)
+    # and head/adult-level long panel with year-over-year transitions.
+    # ------------------------------------------------------------------
+    print("\n" + "=" * 80)
+    print("BUILDING LABOR-SUPPLY MEASURES")
+    panelists, heads_long = add_labor_supply_measures(panelists)
+    print(f"  n_heads distribution:\n{panelists['n_heads'].value_counts().sort_index().to_string()}")
+    print(f"  HHs with a recovered partner: {panelists['has_recovered_partner'].sum():,}")
+    print(f"  Head-level long panel rows: {len(heads_long):,} "
+          f"(heads {(heads_long['role'] != 'partner').sum():,}, "
+          f"partners {(heads_long['role'] == 'partner').sum():,})")
+    print(f"  Non-null head transitions: {heads_long['transition'].notna().sum():,}")
 
     # ------------------------------------------------------------------
     # Merge dietary ailments (from clean_ailments.py output, 2011-2023)
@@ -390,6 +552,11 @@ def main():
 
     out_path = os.path.join(OUTPUT_DIR, 'panelists_all_years.parquet')
     panelists.to_parquet(out_path, index=False)
+
+    # head/adult-level long panel (one row per HH x year x role)
+    heads_long_path = os.path.join(OUTPUT_DIR, 'panelist_heads_long.parquet')
+    heads_long.to_parquet(heads_long_path, index=False)
+    print(f"  Saved: {heads_long_path}  {heads_long.shape}")
 
     # export to stata
     stata_path = os.path.join(OUTPUT_DIR, 'panelists_all_years.dta')

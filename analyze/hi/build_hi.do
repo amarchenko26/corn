@@ -11,6 +11,11 @@ set graphics on
 //   Columns: ['hhid', 'panel_year', 'projection_factor', 'projection_factor_magnet', 'household_income', 'hh_size', 'type_of_residence', 'hh_comp', 'kids', 'male_head_age', 'female_head_age', 'male_head_employment', 'female_head_employment', 'male_head_education', 'female_head_education', 'male_head_occupation', 'female_head_occupation', 'male_head_birth', 'female_head_birth', 'marital_status', 'race', 'hisp', 'panelist_zip_code', 'fips_state_code', 'fips_county_code', 'region_code', 'wic_indicator_current', 'wic_indicator_ever_not_current', 'household_income_label', 'household_income_midpoint', 'hh_comp_label', 'kids_label', 'male_head_age_label', 'female_head_age_label', 'male_head_employment_label', 'female_head_employment_label', 'male_head_education_label', 'female_head_education_label', 'marital_status_label', 'race_label', 'hisp_label']
 
 //hh_employed: 0/1 indicator, averaged across heads (so a two-earner household = 1.0, one-earner = 0.5, no earner = 0.0)
+// hh_avg_workhours_if_employed 
+* Under 30 hours --> 20 
+* 30-34 hours --> 32
+* 35+ hrs --> 40
+* Not Employed --> 0 (excluded from hh_avg_workhours_if_employed, included in hh_avg_workhours)
 
 // expenditure cols
 // ['hhid', 'spend_total', 'spend_produce', 'spend_bread', 'spend_whole_bread', 'spend_high_sugar', 'spend_magnet_data', 'spend_dairy_milk_refrigerated', 'spend_reference_card_meat', 'spend_soft_drinks___carbonated', 'spend_cereal___ready_to_eat', 'spend_soft_drinks___low_calorie', 'spend_bakery___bread___fresh', 'spend_cookies', 'spend_yogurt_refrigerated', 'spend_candy_chocolate', 'spend_reference_card_fruits', 'spend_soup_canned', 'spend_reference_card_prepared_foods', 'spend_ice_cream___bulk', 'spend_fresh_fruit_remaining', 'spend_snacks___potato_chips', 'spend_pizza_frozen', 'spend_cheese___shredded', 'spend_reference_card_poultry', 'spend_eggs_fresh', 'panel_year', 'spend_share_produce', 'spend_share_whole_bread', 'spend_share_high_sugar']
@@ -42,10 +47,17 @@ egen zip_by_year = group(zip_code panel_year)
 
 // N = 289k
 merge 1:1 household_code panel_year using "/Users/anyamarchenko/CEGA Dropbox/Anya Marchenko/nielsen_data/interim/panelists/panelists_all_years.dta", ///
-	keepusing(hh_avg_yrsofschool hh_avg_workhours hh_employed male_head_occupation fips_county_code fips_state_code hh_avg_workhours age_and_presence_of_children household_composition hispanic_origin race obesity n_dietary_conditions hypertension heart_disease diabetes_type1 diabetes_type2 cholesterol any_metabolic_disease) ///
+	keepusing(hh_avg_yrsofschool hh_avg_workhours hh_avg_workhours_if_employed hh_employed ///
+	          male_head_occupation fips_county_code fips_state_code age_and_presence_of_children ///
+	          household_composition hispanic_origin race obesity n_dietary_conditions hypertension ///
+	          heart_disease diabetes_type1 diabetes_type2 cholesterol any_metabolic_disease ///
+	          male_head_status female_head_status male_head_employed female_head_employed ///
+	          n_heads n_head_earners hh_total_workhours ///
+	          has_recovered_partner recovered_partner_sex n_recovered_partner_earners n_earners_total) ///
 	keep(master match)
 
 drop _merge
+
 
 merge 1:1 household_code panel_year using "/Users/anyamarchenko/CEGA Dropbox/Anya Marchenko/nielsen_data/interim/panel_dataset/iv_income.dta", ///
 	keepusing(iv_income_zip iv_income_fips iv_cell_n_lo_fips iv_cell_n_lo_zip cell_zip_share) ///
@@ -53,10 +65,29 @@ merge 1:1 household_code panel_year using "/Users/anyamarchenko/CEGA Dropbox/Any
 
 drop _merge
 
+
 merge 1:1 household_code panel_year using "/Users/anyamarchenko/CEGA Dropbox/Anya Marchenko/nielsen_data/interim/panel_dataset/expenditure_hh_year.dta", ///
 	keepusing(spend_total spend_produce spend_high_sugar  spend_soft_drinks___carbonated spend_cookies spend_ice_cream___bulk spend_share_produce) ///
 	keep(master match)
+	
+drop _merge 
 
+
+merge 1:1 household_code panel_year using "/Users/anyamarchenko/CEGA Dropbox/Anya Marchenko/nielsen_data/interim/panel_dataset/trips_hh_year.dta", ///
+	keepusing(n_trips avg_spend_trip) ///
+	keep(master match)
+	
+drop _merge
+
+merge 1:1 household_code panel_year using "/Users/anyamarchenko/CEGA Dropbox/Anya Marchenko/nielsen_data/interim/panel_dataset/panel_prep_time.dta", ///
+	keepusing(prep_time_raw prep_time) keep(master match)
+	
+drop _merge
+
+
+// USDA-based Health Index (built by build_hi_usda_panel.py; standardized identically to hi)
+merge 1:1 household_code panel_year using "/Users/anyamarchenko/CEGA Dropbox/Anya Marchenko/nielsen_data/interim/panel_dataset/hi_usda_panel.dta", ///
+	keepusing(hi_usda hi_usda_allcott) keep(master match)
 drop _merge
 
 rename *, lower
@@ -78,6 +109,15 @@ ren panel_year year
 // Winsorize hi
 
 winsor2 hi, replace cuts(1 99)
+
+cap confirm variable hi_usda
+if _rc == 0 winsor2 hi_usda, replace cuts(1 99)
+
+
+// ============================================================================
+// Winsorize number of grocery trips
+
+winsor2 n_trips, replace cuts(1 99)
 
 
 // ============================================================================
@@ -115,13 +155,43 @@ xtset hhid year
 cap drop f_hi
 gen f_hi = F.hi - hi
 
+cap drop f_hi_usda
+cap gen f_hi_usda = F.hi_usda - hi_usda
+
 cap drop f_inc
 gen f_inc = F.real_income - real_income
 
 cap drop f_iv
 gen f_iv = F.iv_income_fips - iv_income_fips
 
+cap drop f_n_trips
+gen f_n_trips = F.n_trips - n_trips
 
+cap drop f_hh_avg_workhours
+gen f_hh_avg_workhours = F.hh_avg_workhours - hh_avg_workhours
+
+cap drop f_hh_avg_workhours_emp 
+gen f_hh_avg_workhours_emp = F.hh_avg_workhours_if_employed - hh_avg_workhours_if_employed
+
+// Clean panelist labor supply 
+// FT/PT/NE indicators per head — missing (not 0) when the head doesn't exist
+  foreach h in male female {
+      gen byte `h'_ft = (`h'_head_status == "FT") if `h'_head_status != ""
+      gen byte `h'_pt = (`h'_head_status == "PT") if `h'_head_status != ""
+      gen byte `h'_ne = (`h'_head_status == "NE") if `h'_head_status != ""
+      label var `h'_ft "`h' head works full-time (35+ hrs)"
+      label var `h'_pt "`h' head works part-time (<35 hrs)"
+      label var `h'_ne "`h' head not employed for pay"
+  }
+
+  // Labels for the extensive-margin / recovery vars
+  label var n_head_earners             "Employed heads (0-2)"
+  label var n_earners_total            "Employed adults incl. recovered partner"
+  label var hh_total_workhours         "Summed head work hours (absent head = 0)"
+  label define yesno 0 "No" 1 "Yes"
+  label values has_recovered_partner yesno
+  label var has_recovered_partner      "Single-head HH w/ opposite-sex spouse-aged earner"
+  
 // ============================================================================
 // Save final dataset
 save "/Users/anyamarchenko/CEGA Dropbox/Anya Marchenko/nielsen_data/final/final_reg_data.dta", replace
@@ -171,7 +241,7 @@ eststo m6: reghdfejl D.hi (D.real_income=D.iv_income_fips) [pw = projection_fact
 
 // (7) Forward diff
 // Forward diff (t+1-t) on (t - t-1)
-// beta = .0026, t = 1.91**
+// beta = .0026, t = 1.88**
 eststo m7: reghdfejl f_hi (D.real_income=D.iv_income_fips) [pw = projection_factor], ///
 	absorb(year hhid kids avg_age_hh_head hh_comp) cluster(fips)
 
@@ -180,6 +250,23 @@ eststo m7: reghdfejl f_hi (D.real_income=D.iv_income_fips) [pw = projection_fact
 // -.00003, p = .848
 eststo m8: ivreghdfe D.hi (f_inc = f_iv) [pw = projection_factor], ///
 	absorb(year hhid kids avg_age_hh_head hh_comp) cluster(fips)
+
+// ============================================================================
+// USDA-based HI: re-run the key forward-diff and pre-trend on hi_usda
+// (identical non-mover sample and spec; only the HI nutrition source differs)
+// ============================================================================
+eststo m7_usda: reghdfejl f_hi_usda (D.real_income=D.iv_income_fips) [pw = projection_factor], ///
+	absorb(year hhid kids avg_age_hh_head hh_comp) cluster(fips)
+
+eststo m8_usda: ivreghdfe D.hi_usda (f_inc = f_iv) [pw = projection_factor], ///
+	absorb(year hhid kids avg_age_hh_head hh_comp) cluster(fips)
+
+// Side-by-side: Syndigo vs USDA HI (forward diff = main IV result; pre-trend = placebo)
+esttab m7 m7_usda m8 m8_usda, ///
+	keep(D.real_income f_inc) b(4) se(4) ///
+	star(* 0.10 ** 0.05 *** 0.01) ///
+	mtitles("FwdDiff Syndigo" "FwdDiff USDA" "Pre-trend Syndigo" "Pre-trend USDA") ///
+	stats(N, fmt(%9.0fc) labels("N"))
 
 // Export to LaTeX
 esttab m1 m2 m6 m7 m8 using "/Users/anyamarchenko/CEGA Dropbox/Anya Marchenko/Apps/Overleaf/nutrition/tabs/results.tex", ///
@@ -352,75 +439,104 @@ graph export "/Users/anyamarchenko/CEGA Dropbox/Anya Marchenko/Apps/Overleaf/nut
 * Other outcomes
 *------------------------------------------------------------
 
-************* Diet vars
-local diet_vars whole produce sugar_per_1000cal total_cals
-foreach var in `diet_vars' {
-    quietly eststo `var': ivreghdfe `var' (real_income=iv_income_fips) [pw = projection_factor] if movers_f==0, ///
-        absorb(year hhid kids avg_age_hh_head hh_comp) cluster(fips)
-    quietly summarize `var' if e(sample)
-    local mean_`var' = r(mean)
-    estadd scalar mean_y = `mean_`var'': `var'
+local diet_vars  total_cals whole produce sugar_per_1000cal
+local spend_vars spend_total spend_produce spend_share_produce spend_high_sugar spend_soda 
+
+foreach var in `diet_vars' `spend_vars' {
+    cap gen f_`var' = F.`var' - `var'
 }
-esttab `diet_vars', ///
-    keep(real_income) compress ///
-    b(3) p(3) ///
-    star(* 0.10 ** 0.05 *** 0.01) ///
-    title("IV Regression Results: Effect of Income") ///
-    mtitles(`diet_vars') ///
-    stats(mean_y N, fmt(%9.3fc %9.0fc) labels("Mean outcome" "N"))
+
+************* Diet vars
+foreach var in `diet_vars' {
+	quietly eststo f_`var': ivreghdfe f_`var' (D.real_income=D.iv_income_fips) ///
+        [pw = projection_factor] if movers_f == 0, ///
+		absorb(year hhid kids avg_age_hh_head hh_comp) cluster(fips)
+    quietly summarize f_`var' if e(sample)
+    local mean_`var' = r(mean)
+    estadd scalar mean_y = `mean_`var'': f_`var'
+}
 
 ************* Spend vars
-local spend_vars spend_total spend_produce spend_high_sugar spend_soda spend_cookies spend_icecream spend_share_produce
 foreach var in `spend_vars' {
-    quietly eststo `var': ivreghdfe `var' (real_income=iv_income_fips) [pw = projection_factor] if movers_f==0, ///
-        absorb(year hhid kids avg_age_hh_head hh_comp) cluster(fips)
-    quietly summarize `var' if e(sample)
+	
+	quietly eststo f_`var': ivreghdfe f_`var' (D.real_income=D.iv_income_fips) ///
+        [pw = projection_factor] if movers_f == 0, ///
+		absorb(year hhid kids avg_age_hh_head hh_comp) cluster(fips)
+    quietly summarize f_`var' if e(sample)
     local mean_`var' = r(mean)
-    estadd scalar mean_y = `mean_`var'': `var'
+    estadd scalar mean_y = `mean_`var'': f_`var'
 }
 
-* Print table
-esttab spend_total spend_produce spend_high_sugar spend_soda, ///
-    keep(real_income) compress ///
-    b(3) p(3) ///
-    star(* 0.10 ** 0.05 *** 0.01) ///
-    title("IV Regression Results: Effect of Income") ///
-    mlabels("total" "produce" "high_sugar" "soda") ///
-    stats(mean_y N, fmt(%9.3fc %9.0fc) labels("Mean outcome" "N"))
 
-esttab spend_total spend_high_sugar spend_soda total_cals sugar_per_1000cal  ///
+esttab f_spend_total f_spend_high_sugar f_spend_share_produce f_total_cals f_sugar_per_1000cal  ///
     using "/Users/anyamarchenko/CEGA Dropbox/Anya Marchenko/Apps/Overleaf/nutrition/tabs/expenditure.tex", replace ///
-    keep(real_income) ///
+    keep(D.real_income) varlabels(D1.real_income "$m_t$") ///
     b(3) se(3) ///
     star(* 0.10 ** 0.05 *** 0.01) ///
-    mlabels("Total spend" "High sugar spend" "Soda spend" "Total calories" "Sugar per 1000 cal") ///
-    mgroups("Expenditure" "Nutrition Components", pattern(1 0 0 1 0) ///
+	mlabels("Total" "High sugar" "Produce share" "Calories" "Sugar density") ///
+    mgroups("Expenditure (\\$s per year)" "Nutrition Components", pattern(1 0 0 1 0) ///
         prefix(\multicolumn{@span}{c}{) suffix(}) ///
         span erepeat(\cmidrule(lr){@span})) ///
     collabels(none) ///
     booktabs ///
-    varlabels(real_income "$m_t$") ///
     stats(mean_y N, fmt(%9.0fc %9.0fc) labels("Mean outcome" "N")) ///
     nonotes addnotes("* p\$<\$0.10, ** p\$<\$0.05, *** p\$<\$0.01. 2SLS specification using non-movers with household and year fixed effects. Controlling for household size, composition, age of household head.")
-	
-	
+
 	
 ************* Health vars
-local health_vars any_diabetes obesity any_metabolic_disease cholesterol diabetes_type2 heart_disease hypertension obesity
+local health_vars any_diabetes obesity any_metabolic_disease cholesterol diabetes_type2 heart_disease hypertension
 foreach var in `health_vars' {
-    eststo `var': ivreghdfe `var' (real_income=iv_income_fips) [pw = projection_factor] if movers_f==0, ///
+    eststo `var': ivreghdfe F3.`var' (D.real_income=D.iv_income_fips) [pw = projection_factor] if movers_f==0, ///
     absorb(year hhid kids avg_age_hh_head hh_comp) cluster(fips)
+
+    quietly summarize `var' if e(sample)
+    local mean_`var' = r(mean)
+    estadd scalar mean_y = `mean_`var'': f_`var'
 }
 
-* Print table 
-esttab `health_vars', ///
-    keep(real_income) compress ///
-    b(3) p(3) ///
+esttab hypertension any_metabolic_disease obesity cholesterol  ///
+    using "/Users/anyamarchenko/CEGA Dropbox/Anya Marchenko/Apps/Overleaf/nutrition/tabs/health.tex", replace ///
+    keep(D.real_income) varlabels(D1.real_income "$m_t$") ///
+    b(3) se(3) ///
     star(* 0.10 ** 0.05 *** 0.01) ///
-    title("IV Regression Results: Effect of Income") ///
-    mtitles(`health_vars')
+	mlabels("Any Metabolic Disease" "Hypertension" "Obesity" "High Cholesterol") ///
+    collabels(none) ///
+    booktabs ///
+    stats(mean_y N, fmt(%9.0fc %9.0fc) labels("Mean outcome" "N")) ///
+    nonotes addnotes("* p\$<\$0.10, ** p\$<\$0.05, *** p\$<\$0.01. All health outcomes measured at t+3. Specification using non-movers with household and year fixed effects. Controlling for household size, composition, age of household head.")
+	
+	
+************* Num trips 
+ivreghdfe n_trips (real_income=iv_income_fips) [pw = projection_factor] if movers_f==0, ///
+    absorb(year hhid kids avg_age_hh_head hh_comp) cluster(fips)
+
+
+ivreghdfe f_n_trips (D.real_income=D.iv_income_fips) [pw = projection_factor] if movers_f==0, ///
+    absorb(year hhid kids avg_age_hh_head hh_comp) cluster(fips)
 
 	
+************* Hours worked
+
+ivreghdfe f_hh_avg_workhours (D.real_income=D.iv_income_fips) [pw = projection_factor] if movers_f==0, absorb(year hhid kids avg_age_hh_head hh_comp) cluster(fips)
+
+ivreghdfe f_hh_avg_workhours_emp (D.real_income=D.iv_income_fips) [pw = projection_factor] if movers_f==0, absorb(year hhid kids avg_age_hh_head hh_comp) cluster(fips)
+
+cap gen f_hh_employed = F.hh_employed - hh_employed
+ivreghdfe f_hh_employed (D.real_income=D.iv_income_fips) [pw = projection_factor] if movers_f==0, absorb(year hhid kids avg_age_hh_head hh_comp) cluster(fips)
+	
+cap gen f_prep_time = F.prep_time - prep_time
+ivreghdfe f_prep_time (D.real_income=D.iv_income_fips) [pw = projection_factor] if movers_f==0, absorb(year hhid kids avg_age_hh_head hh_comp) cluster(fips)
+
+
+
+************* Employment by sex of head (women vs men)
+* Forward diff of each head's employed indicator (missing when that head is absent)
+cap gen f_male_head_employed   = F.male_head_employed   - male_head_employed
+ivreghdfe f_male_head_employed (D.real_income=D.iv_income_fips) [pw = projection_factor] if movers_f==0, absorb(year hhid kids avg_age_hh_head hh_comp) cluster(fips)
+
+cap gen f_female_head_employed = F.female_head_employed - female_head_employed
+ivreghdfe f_female_head_employed (D.real_income=D.iv_income_fips) [pw = projection_factor] if movers_f==0, absorb(year hhid kids avg_age_hh_head hh_comp) cluster(fips)
+
 *------------------------------------------------------------
 * Compliers
 *------------------------------------------------------------
@@ -432,39 +548,39 @@ reghdfejl male_head_occupation  (real_income = iv_income_fips) [pw = projection_
 	
 	
 	
-************* First Differences Setup
+************* Forward Differences Setup
 * Generate first differences for all outcomes
 local diet_vars whole produce sugar_per_1000cal total_cals
-local spend_vars spend_total spend_produce spend_high_sugar spend_soda spend_cookies spend_ice_cream___bulk spend_share_produce
+local spend_vars spend_total spend_produce spend_high_sugar spend_soda spend_cookies spend_icecream spend_share_produce avg_spend_trip
 local health_vars any_diabetes any_metabolic_disease cholesterol diabetes_type1 diabetes_type2 heart_disease hypertension obesity
 
 foreach var in `diet_vars' `spend_vars' `health_vars' {
-    cap gen d_`var' = D.`var'
+    cap gen f_`var' = F.`var' - `var'
 }
 
 ************* Diet vars
 local diet_vars whole produce sugar_per_1000cal total_cals
 foreach var in `diet_vars' {
-    eststo d_`var': ivreghdfe d_`var' (d_real_income = d_iv_income_fips) ///
+    eststo f_`var': ivreghdfe f_`var' (D.real_income=D.iv_income_fips) ///
         [pw = projection_factor] if movers_f == 0, ///
-        absorb(year d_kids d_hh_comp d_avg_age_hh_head) cluster(fips)
+		absorb(year hhid kids avg_age_hh_head hh_comp) cluster(fips)
 }
-esttab d_whole d_produce d_sugar_per_1000cal d_total_cals, ///
-    keep(d_real_income) compress ///
+esttab f_whole f_produce f_sugar_per_1000cal f_total_cals, ///
+    keep(D.real_income) compress ///
     b(3) p(3) ///
     star(* 0.10 ** 0.05 *** 0.01) ///
     title("FD-IV Results: Effect of Income on Diet") ///
     mtitles("whole" "produce" "sugar_per_1000cal" "total_cals")
 
 ************* Spend vars
-local spend_vars spend_total spend_produce spend_high_sugar spend_soda spend_cookies spend_ice_cream___bulk spend_share_produce
+local spend_vars spend_total spend_produce spend_high_sugar spend_soda spend_cookies spend_icecream spend_share_produce
 foreach var in `spend_vars' {
-    eststo d_`var': ivreghdfe d_`var' (d_real_income = d_iv_income_fips) ///
+    eststo f_`var': ivreghdfe f_`var' (D.real_income=D.iv_income_fips) ///
         [pw = projection_factor] if movers_f == 0, ///
-        absorb(year d_kids d_hh_comp d_avg_age_hh_head) cluster(fips)
+		absorb(year hhid kids avg_age_hh_head hh_comp) cluster(fips)
 }
-esttab d_spend_total d_spend_produce d_spend_high_sugar d_spend_soda d_spend_cookies d_spend_ice_cream___bulk d_spend_share_produce, ///
-    keep(d_real_income) compress ///
+esttab f_spend_total f_spend_produce f_spend_high_sugar f_spend_soda f_spend_cookies f_spend_icecream f_spend_share_produce, ///
+    keep(D.real_income) compress ///
     b(3) p(3) ///
     star(* 0.10 ** 0.05 *** 0.01) ///
     title("FD-IV Results: Effect of Income on Spending") ///
@@ -473,16 +589,16 @@ esttab d_spend_total d_spend_produce d_spend_high_sugar d_spend_soda d_spend_coo
 ************* Health vars
 local health_vars any_diabetes any_metabolic_disease cholesterol diabetes_type1 diabetes_type2 heart_disease hypertension obesity
 foreach var in `health_vars' {
-    eststo d_`var': ivreghdfe d_`var' (d_real_income = d_iv_income_fips) ///
+    eststo `var': ivreghdfe `var' (real_income=iv_income_fips) ///
         [pw = projection_factor] if movers_f == 0, ///
-        absorb(year d_kids d_hh_comp d_avg_age_hh_head) cluster(fips)
+		absorb(year hhid kids avg_age_hh_head hh_comp) cluster(fips)
 }
-esttab d_any_diabetes d_any_metabolic_disease d_cholesterol d_diabetes_type1 d_diabetes_type2 d_heart_disease d_hypertension d_obesity, ///
-    keep(d_real_income) compress ///
+esttab any_diabetes any_metabolic_disease cholesterol diabetes_type1 diabetes_type2 heart_disease hypertension obesity, ///
+    keep(real_income) compress ///
     b(3) p(3) ///
     star(* 0.10 ** 0.05 *** 0.01) ///
     title("FD-IV Results: Effect of Income on Health") ///
-    mtitles("any_diabetes" "any_metabolic_disease" "cholesterol" "diabetes_type1" "diabetes_type2" "heart_disease" "hypertension" "obesity")
+    mtitles("diabetes" "met_disease" "cholesterol" "diabetes_type1" "diabetes_type2" "heart_disease" "hypertension" "obesity")
 
 
 

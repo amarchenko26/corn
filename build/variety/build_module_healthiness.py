@@ -11,11 +11,16 @@ Output: module_healthiness.parquet
   hi_per_100g (mean UPC-level HI), plus mean nutrients per 100g
 """
 
+import os, sys
 import pandas as pd
 import numpy as np
 from pathlib import Path
+# repo reorganized into stage folders: reach shared utils/ and clean/syndigo/ for local imports
+_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
+sys.path.insert(0, os.path.join(_ROOT, 'utils'))
+sys.path.insert(0, os.path.join(_ROOT, 'clean', 'syndigo'))
 from food_filters import DROP_DEPARTMENTS_PRE_2021, DROP_PRODUCT_GROUPS, DROP_PRODUCT_MODULES
-from merge_nielsen_syn import harmonize_nielsen_upc
+from merge_nielsen_syndigo import harmonize_nielsen_upc
 
 # ============================================================
 # PATHS
@@ -65,6 +70,32 @@ def get_food_products(products):
     food = products[mask].copy()
     log(f"  Food UPCs: {len(food):,} / {len(products):,}")
     return food
+
+
+def canonicalize_module_descriptions(food_prods):
+    """
+    Pick one canonical description per code by taking the mode.
+    products.tsv sometimes has minor string variants for the same module code
+    (e.g. with/without quotes), which causes spurious duplicate rows when
+    groupby includes the description column.
+    """
+    def _mode_first(x):
+        m = x.dropna().mode()
+        return m.iloc[0] if len(m) > 0 else x.iloc[0]
+
+    canon_mod = (food_prods.groupby('product_module_code')['product_module_descr']
+                 .agg(_mode_first)
+                 .rename('_mod_canon').reset_index())
+    canon_grp = (food_prods.groupby('product_group_code')['product_group_descr']
+                 .agg(_mode_first)
+                 .rename('_grp_canon').reset_index())
+    food_prods = (food_prods
+                  .merge(canon_mod, on='product_module_code')
+                  .merge(canon_grp, on='product_group_code'))
+    food_prods['product_module_descr'] = food_prods['_mod_canon']
+    food_prods['product_group_descr']  = food_prods['_grp_canon']
+    food_prods = food_prods.drop(columns=['_mod_canon', '_grp_canon'])
+    return food_prods
 
 
 # ============================================================
@@ -180,6 +211,10 @@ def collapse_to_module(df, food_prods, upc_spending=None):
     out['satfat_score'] = -out['satfat_per_100g'] / 17.2
     out['sodium_score'] = -out['sodium_per_100g'] /  2.3
     out['chol_score']   = -out['chol_per_100g']   /  0.3
+
+    dupes = out[out.duplicated('product_module_code', keep=False)]['product_module_code'].unique()
+    assert len(dupes) == 0, f"Duplicate product_module_codes in output: {dupes.tolist()}"
+
     return out
 
 
@@ -190,6 +225,8 @@ def main():
     products   = load_products_master()
     food_prods = get_food_products(products)
     del products
+
+    food_prods = canonicalize_module_descriptions(food_prods)
 
     # Harmonize UPCs to 13 digits before any merge (Nielsen 12-digit → prepend '0')
     food_prods['upc'] = harmonize_nielsen_upc(food_prods['upc'])
