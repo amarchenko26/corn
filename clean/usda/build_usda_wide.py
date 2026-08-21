@@ -21,6 +21,8 @@ NUT = {
     '1063': ('sugar_1063',      'g'),    # fallback
     '1235': ('addsugar_per_100g','g'),   # bonus (not in Syndigo)
     '1004': ('totfat_per_100g', 'g'),
+    '1292': ('mufat_per_100g',  'g'),    # monounsaturated (for HEI fatty-acid ratio)
+    '1293': ('pufat_per_100g',  'g'),    # polyunsaturated (for HEI fatty-acid ratio)
 }
 KEEP_IDS = set(NUT)
 
@@ -86,7 +88,10 @@ df = df.sort_values(['upc13','has_cal','n_complete','recency'],
                     ascending=[True, False, False, False])
 usda = df.drop_duplicates('upc13', keep='first').copy()
 
-keep = ['upc13','upc12','gtin_upc','serving_size','serving_size_unit','branded_food_category'] + NUTCOLS + ['fiber_per_100g']
+# NOTE: mufat/pufat are deliberately NOT in NUTCOLS -- adding them to the dedup
+# completeness ranking would change which record wins per UPC and perturb the
+# validated usda_wide selection. They ride along on whichever record already wins.
+keep = ['upc13','upc12','gtin_upc','serving_size','serving_size_unit','branded_food_category'] + NUTCOLS + ['fiber_per_100g','mufat_per_100g','pufat_per_100g']
 keep = list(dict.fromkeys([c for c in keep if c in usda.columns]))
 usda = usda[keep]
 

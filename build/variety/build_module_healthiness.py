@@ -28,7 +28,13 @@ from merge_nielsen_syndigo import harmonize_nielsen_upc
 base        = Path('/Users/anyamarchenko/CEGA Dropbox/Anya Marchenko/nielsen_data')
 PRODUCTS_TSV = base / 'raw' / 'products.tsv'
 SYNDIGO_DIR  = base / 'interim' / 'syndigo_nielsen_merged'
+USDA_DIR     = base / 'interim' / 'usda_nielsen_merged'
 OUT_DIR      = base / 'interim' / 'rms_variety'
+
+# nutrition source: `python build_module_healthiness.py [syndigo|usda]`
+# (usda mode -> module_healthiness_usda.parquet; syndigo output unchanged)
+SOURCE = (sys.argv[1] if len(sys.argv) > 1 else 'syndigo').lower()
+assert SOURCE in ('syndigo', 'usda')
 
 OUT_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -102,9 +108,16 @@ def canonicalize_module_descriptions(food_prods):
 # STEP 2: Load Syndigo wide (one row per UPC, nutrients per 100g)
 # ============================================================
 def load_syndigo():
-    path = SYNDIGO_DIR / 'syndigo_wide.parquet'
-    log(f"Loading Syndigo from {path}...")
-    df = pd.read_parquet(path, columns=['upc'] + NUTRIENT_COLS)
+    """Load the chosen nutrition source as a per-100g wide table keyed 'upc' (13-digit)."""
+    if SOURCE == 'usda':
+        path = USDA_DIR / 'usda_wide.parquet'
+        log(f"Loading USDA from {path}...")
+        df = pd.read_parquet(path, columns=['upc13'] + NUTRIENT_COLS
+                             ).rename(columns={'upc13': 'upc'})
+    else:
+        path = SYNDIGO_DIR / 'syndigo_wide.parquet'
+        log(f"Loading Syndigo from {path}...")
+        df = pd.read_parquet(path, columns=['upc'] + NUTRIENT_COLS)
     log(f"  {len(df):,} UPCs with nutrient data")
     return df
 
@@ -250,7 +263,8 @@ def main():
         log("  Equal-weighting (upc_total_spending.parquet not found)")
     out = collapse_to_module(merged, food_prods, upc_spending)
 
-    out_path = OUT_DIR / 'module_healthiness.parquet'
+    out_path = OUT_DIR / ('module_healthiness.parquet' if SOURCE == 'syndigo'
+                          else 'module_healthiness_usda.parquet')
     out.to_parquet(out_path, index=False)
     log(f"\nSaved: {out_path}")
     log(f"Modules: {len(out):,}")

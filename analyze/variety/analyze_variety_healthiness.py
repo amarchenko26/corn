@@ -11,6 +11,7 @@ Inputs:
 Output: scatterplots saved to OUT_DIR
 """
 
+import sys
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
@@ -21,10 +22,19 @@ OUT_DIR = base / 'interim' / 'rms_variety'
 FIG_DIR = Path('/Users/anyamarchenko/CEGA Dropbox/Anya Marchenko/Apps/Overleaf/nutrition/figs')
 FIG_DIR.mkdir(parents=True, exist_ok=True)
 
+# nutrition source: `python analyze_variety_healthiness.py [syndigo|usda]`.
+# usda mode reads module_healthiness_usda.parquet and suffixes outputs _usda.
+# NOTE: the two DECK figures (variety_hi_share_new, variety_hi_ssnp) classify by
+# claude_hi (source-independent); usda mode moves them only via the coverage gate.
+SOURCE = (sys.argv[1] if len(sys.argv) > 1 else 'syndigo').lower()
+assert SOURCE in ('syndigo', 'usda')
+SUFF = '' if SOURCE == 'syndigo' else '_usda'
+
 # ============================================================
 # LOAD
 # ============================================================
-health    = pd.read_parquet(OUT_DIR / 'module_healthiness.parquet')
+health    = pd.read_parquet(OUT_DIR / ('module_healthiness.parquet' if SOURCE == 'syndigo'
+                                       else 'module_healthiness_usda.parquet'))
 claude_hi = pd.read_parquet(OUT_DIR / 'claude_hi_scores.parquet',
                             columns=['product_module_code', 'claude_hi', 'rationale'])
 
@@ -63,7 +73,7 @@ df = health[['product_module_code', 'product_module_descr', 'product_group_code'
 df = df.merge(claude_hi, on='product_module_code', how='left')
 
 print(f"Modules in analysis: {len(df):,}")
-print(f"Dropping modules with <1% Syndigo coverage...")
+print(f"Dropping modules with <1% {SOURCE} coverage...")
 df = df[df['pct_coverage'] >= 0.01].copy()
 print(f"Modules after coverage filter: {len(df):,}")
 
@@ -121,7 +131,7 @@ def scatter(x_col, y_col, xlabel, ylabel, fname, size_col='total_spending'):
     ax.set_title(f"r = {r:.3f}  (n = {mask.sum()})")
     ax.set_ylim(*d[y_col].quantile([0.01, 0.99]))
     plt.tight_layout()
-    fig.savefig(FIG_DIR / fname, dpi=150)
+    fig.savefig(FIG_DIR / fname.replace('.png', f'{SUFF}.png'), dpi=150)
     plt.close()
     print(f"Saved {fname}")
 
@@ -162,7 +172,7 @@ def quartile_dot(x_col, y_col, xlabel, ylabel, fname):
     ax.set_ylim(means.min() - ci.max() - pad,
                 means.max() + ci.max() + pad)
     plt.tight_layout()
-    fig.savefig(FIG_DIR / fname, dpi=150)
+    fig.savefig(FIG_DIR / fname.replace('.png', f'{SUFF}.png'), dpi=150)
     plt.close()
     print(f"Saved {fname}")
 
@@ -183,7 +193,7 @@ print(bot.to_string(index=False))
 dupes = df[df.duplicated('product_module_code', keep=False)]['product_module_code'].unique()
 assert len(dupes) == 0, f"Duplicate product_module_codes before export: {dupes.tolist()}"
 
-out_path = OUT_DIR / 'variety_healthiness_module.dta'
+out_path = OUT_DIR / f'variety_healthiness_module{SUFF}.dta'
 df.drop(columns=['rationale']).to_stata(str(out_path), write_index=False)
 print(f"\nSaved {out_path}")
 

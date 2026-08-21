@@ -85,10 +85,20 @@ merge 1:1 household_code panel_year using "/Users/anyamarchenko/CEGA Dropbox/Any
 drop _merge
 
 
-// USDA-based Health Index (built by build_hi_usda_panel.py; standardized identically to hi)
+// USDA-based Health Index + component outcomes (built by build_hi_usda_panel.py;
+// hi_usda standardized identically to hi; components: added sugar is USDA-only,
+// addsugar_cal_share_usda = share of matched calories carrying an added-sugar value)
 merge 1:1 household_code panel_year using "/Users/anyamarchenko/CEGA Dropbox/Anya Marchenko/nielsen_data/interim/panel_dataset/hi_usda_panel.dta", ///
-	keepusing(hi_usda hi_usda_allcott) keep(master match)
+	keepusing(hi_usda hi_usda_allcott rHI_usda total_cals_usda ///
+	sugar_per_1000cal_usda sodium_per_1000cal_usda addsugar_per_1000cal_usda ///
+	addsugar_cal_share_usda produce_usda whole_usda) keep(master match)
 drop _merge
+
+// Full HEI-2020 (USDA scoring, 0-100; built by build_hei_panel.py).
+// hei_usda_90 excludes the fatty-acid component (module-median imputed) and rescales.
+cap merge 1:1 household_code panel_year using "/Users/anyamarchenko/CEGA Dropbox/Anya Marchenko/nielsen_data/interim/panel_dataset/hei_usda_panel.dta", ///
+	keepusing(hei_usda hei_usda_90) keep(master match)
+cap drop _merge
 
 rename *, lower
 
@@ -277,7 +287,7 @@ esttab m1 m2 m6 m7 m8 using "/Users/anyamarchenko/CEGA Dropbox/Anya Marchenko/Ap
 	keep(real_income D.real_income f_inc) ///
 	varlabels(real_income "Income (t)" D.real_income "Income (t-1)" f_inc "Income (t+1)") ///
 	stats(N r2, fmt(%9.0fc %9.4f) labels("N" "R-squared")) ///
-	nonotes addnotes("* p$<$0.10, ** p$<$0.05, *** p$<$0.01. Outcome variable is differences of nutrition. Income is in 10,000s.")
+	nonotes
 	
 	
 esttab m4 m5 using "/Users/anyamarchenko/CEGA Dropbox/Anya Marchenko/Apps/Overleaf/nutrition/tabs/results_robust.tex", ///
@@ -288,7 +298,7 @@ esttab m4 m5 using "/Users/anyamarchenko/CEGA Dropbox/Anya Marchenko/Apps/Overle
 	keep(real_income) ///
 	varlabels(real_income "Income (t)" D.real_income "Income (t-1)" f_inc "Income (t+1)") ///
 	stats(N r2, fmt(%9.0fc %9.4f) labels("N" "R-squared")) ///
-	nonotes addnotes("* p$<$0.10, ** p$<$0.05, *** p$<$0.01. Outcome variable is nutrition. Income is in 10,000s.")
+	nonotes
 	
 restore 
 
@@ -479,8 +489,8 @@ esttab f_spend_total f_spend_high_sugar f_spend_share_produce f_total_cals f_sug
         span erepeat(\cmidrule(lr){@span})) ///
     collabels(none) ///
     booktabs ///
-    stats(mean_y N, fmt(%9.0fc %9.0fc) labels("Mean outcome" "N")) ///
-    nonotes addnotes("* p\$<\$0.10, ** p\$<\$0.05, *** p\$<\$0.01. 2SLS specification using non-movers with household and year fixed effects. Controlling for household size, composition, age of household head.")
+    stats(mean_y N, fmt(%9.2fc %9.0fc) labels("Mean outcome" "N")) ///
+    nonotes
 
 	
 ************* Health vars
@@ -491,19 +501,19 @@ foreach var in `health_vars' {
 
     quietly summarize `var' if e(sample)
     local mean_`var' = r(mean)
-    estadd scalar mean_y = `mean_`var'': f_`var'
+    estadd scalar mean_y = `mean_`var'': `var'
 }
 
-esttab hypertension any_metabolic_disease obesity cholesterol  ///
+esttab any_metabolic_disease hypertension obesity cholesterol  ///
     using "/Users/anyamarchenko/CEGA Dropbox/Anya Marchenko/Apps/Overleaf/nutrition/tabs/health.tex", replace ///
-    keep(D.real_income) varlabels(D1.real_income "$m_t$") ///
+    keep(D.real_income) varlabels(D.real_income "$m_t$") ///
     b(3) se(3) ///
     star(* 0.10 ** 0.05 *** 0.01) ///
 	mlabels("Any Metabolic Disease" "Hypertension" "Obesity" "High Cholesterol") ///
     collabels(none) ///
     booktabs ///
-    stats(mean_y N, fmt(%9.0fc %9.0fc) labels("Mean outcome" "N")) ///
-    nonotes addnotes("* p\$<\$0.10, ** p\$<\$0.05, *** p\$<\$0.01. All health outcomes measured at t+3. Specification using non-movers with household and year fixed effects. Controlling for household size, composition, age of household head.")
+    stats(mean_y N, fmt(%9.3fc %9.0fc) labels("Mean outcome" "N")) ///
+    nonotes
 	
 	
 ************* Num trips 

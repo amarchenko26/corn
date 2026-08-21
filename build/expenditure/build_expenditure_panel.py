@@ -20,6 +20,7 @@ Saved to:
   interim/panel_dataset/expenditure_hh_year.dta
 """
 
+import sys
 import pandas as pd
 import numpy as np
 from pathlib import Path
@@ -30,8 +31,16 @@ warnings.filterwarnings('ignore')
 BASE      = Path('/Users/anyamarchenko/CEGA Dropbox/Anya Marchenko/nielsen_data')
 PURCHASES = BASE / 'interim' / 'purchases_food'
 SYNDIGO   = BASE / 'interim' / 'syndigo_nielsen_merged' / 'syndigo_wide.parquet'
+USDA      = BASE / 'interim' / 'usda_nielsen_merged' / 'usda_wide.parquet'
 OUT_DIR   = BASE / 'interim' / 'panel_dataset'
 OUT_DIR.mkdir(parents=True, exist_ok=True)
+
+# nutrition source for the high-sugar classification (all other columns are
+# classification-free): `python build_expenditure_panel.py [syndigo|usda]`
+# usda mode -> expenditure_hh_year_usda.parquet/.dta
+SOURCE = (sys.argv[1] if len(sys.argv) > 1 else 'syndigo').lower()
+assert SOURCE in ('syndigo', 'usda')
+SUFF = '' if SOURCE == 'syndigo' else '_usda'
 
 YEARS = range(2004, 2021)
 CPI_BASE_YEAR = 2013
@@ -60,8 +69,12 @@ TOP_N_MODULES = 20
 # ============================================================
 # Load Syndigo — only sugar and calorie columns
 # ============================================================
-print("Loading Syndigo (sugar/cal)...")
-syn = pd.read_parquet(SYNDIGO, columns=['upc', 'sugar_per_100g', 'cal_per_100g'])
+print(f"Loading {SOURCE} (sugar/cal)...")
+if SOURCE == 'usda':
+    syn = pd.read_parquet(USDA, columns=['upc13', 'sugar_per_100g', 'cal_per_100g']
+                          ).rename(columns={'upc13': 'upc'})
+else:
+    syn = pd.read_parquet(SYNDIGO, columns=['upc', 'sugar_per_100g', 'cal_per_100g'])
 syn = syn.dropna(subset=['sugar_per_100g', 'cal_per_100g'])
 syn = syn[syn['cal_per_100g'] > 0]
 syn['sugar_per_1000cal'] = syn['sugar_per_100g'] / syn['cal_per_100g'] * 1000
@@ -197,8 +210,8 @@ combined = combined.rename(columns=rename_map)
 print(f"\nCombined: {len(combined):,} HH-year obs")
 print(f"Columns: {list(combined.columns)}")
 
-out_pq = OUT_DIR / 'expenditure_hh_year.parquet'
-out_dta = OUT_DIR / 'expenditure_hh_year.dta'
+out_pq = OUT_DIR / f'expenditure_hh_year{SUFF}.parquet'
+out_dta = OUT_DIR / f'expenditure_hh_year{SUFF}.dta'
 combined.to_parquet(out_pq, index=False)
 combined.to_stata(str(out_dta), write_index=False)
 print(f"Saved: {out_pq}")

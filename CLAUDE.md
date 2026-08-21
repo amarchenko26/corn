@@ -17,7 +17,7 @@ clean/     raw → tidy, per source
   syndigo/   clean_syndigo · merge_nielsen_syndigo         → interim/syndigo_nielsen_merged/syndigo_wide.parquet
   usda/      build_usda_wide                               → interim/usda_nielsen_merged/usda_wide.parquet
 build/     analytic panels & variables
-  hi/          build_hi_panel · build_hi_usda_panel · build_claude_hi · add_sodium_to_panel · export_hi_usda_dta
+  hi/          build_claude_hi · syndigo/(build_hi_panel · add_sodium_to_panel) · usda/(build_hi_usda_panel · export_hi_usda_dta) · full_hei/(build_hei_crosswalk · build_hei_panel)
   iv/          build_iv · build_county_income_shock · build_bartik_bls_iv · build_bartik_bls_module_iv · build_jaravel_ssiv
   variety/     build_product_variety · build_module_healthiness · build_module_income_elasticity · build_upc_spending · build_price_index (+ run_*.sh)
   innovation/  build_innovation_reg_data · build_upc_first_year_county (+ run_*.sh)
@@ -25,7 +25,7 @@ build/     analytic panels & variables
   prep_time/   build_prep_time_index · build_prep_time_panel
   monthly_cycle/ build_monthly_cycle_panel
 analyze/   regressions & figures
-  hi/          build_hi.do (assembly + main IV regs) · verify_hi_usda.do · figure_hi_over_time · figure_predicted_vs_actual_hi · replicate_figure1
+  hi/          build_outcome_robustness.do (cross-source robustness table) · syndigo/(build_hi.do: assembly of final_reg_data + main IV regs · figure_hi_over_time · figure_predicted_vs_actual_hi · replicate_figure1) · usda/(build_usda_exhibits.do · build_usda_mechanisms_table.do · verify_hi_usda.do · replicate_figure1_usda) · full_hei/(build_hei_note_results.do · figure_hei_vs_hi)
   variety/     analyze_variety_healthiness · analyze_variety_price_index
   innovation/  analyze_innovation_inequality · innovation.do
   monthly_cycle/ build_monthly_cycle_regs.do

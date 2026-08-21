@@ -408,3 +408,6 @@ jaravel_replication/5c_feenstra_ces_QM.do
 jaravel_replication/5d_Figure7.do
 jaravel_replication/5e_Table9.do
 jaravel_replication/Master.do
+
+# Stata do-file editor swap files
+*.stswp
