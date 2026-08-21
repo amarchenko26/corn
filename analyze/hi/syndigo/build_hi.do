@@ -177,31 +177,9 @@ gen f_iv = F.iv_income_fips - iv_income_fips
 cap drop f_n_trips
 gen f_n_trips = F.n_trips - n_trips
 
-cap drop f_hh_avg_workhours
-gen f_hh_avg_workhours = F.hh_avg_workhours - hh_avg_workhours
+// Labor supply variable construction (head hours, FT/PT/NE indicators, forward
+// diffs, head-specific shocks) moved to analyze/labor_supply/1_build_labor_supply_data.do
 
-cap drop f_hh_avg_workhours_emp 
-gen f_hh_avg_workhours_emp = F.hh_avg_workhours_if_employed - hh_avg_workhours_if_employed
-
-// Clean panelist labor supply 
-// FT/PT/NE indicators per head — missing (not 0) when the head doesn't exist
-  foreach h in male female {
-      gen byte `h'_ft = (`h'_head_status == "FT") if `h'_head_status != ""
-      gen byte `h'_pt = (`h'_head_status == "PT") if `h'_head_status != ""
-      gen byte `h'_ne = (`h'_head_status == "NE") if `h'_head_status != ""
-      label var `h'_ft "`h' head works full-time (35+ hrs)"
-      label var `h'_pt "`h' head works part-time (<35 hrs)"
-      label var `h'_ne "`h' head not employed for pay"
-  }
-
-  // Labels for the extensive-margin / recovery vars
-  label var n_head_earners             "Employed heads (0-2)"
-  label var n_earners_total            "Employed adults incl. recovered partner"
-  label var hh_total_workhours         "Summed head work hours (absent head = 0)"
-  label define yesno 0 "No" 1 "Yes"
-  label values has_recovered_partner yesno
-  label var has_recovered_partner      "Single-head HH w/ opposite-sex spouse-aged earner"
-  
 // ============================================================================
 // Save final dataset
 save "/Users/anyamarchenko/CEGA Dropbox/Anya Marchenko/nielsen_data/final/final_reg_data.dta", replace
@@ -525,27 +503,13 @@ ivreghdfe f_n_trips (D.real_income=D.iv_income_fips) [pw = projection_factor] if
     absorb(year hhid kids avg_age_hh_head hh_comp) cluster(fips)
 
 	
-************* Hours worked
-
-ivreghdfe f_hh_avg_workhours (D.real_income=D.iv_income_fips) [pw = projection_factor] if movers_f==0, absorb(year hhid kids avg_age_hh_head hh_comp) cluster(fips)
-
-ivreghdfe f_hh_avg_workhours_emp (D.real_income=D.iv_income_fips) [pw = projection_factor] if movers_f==0, absorb(year hhid kids avg_age_hh_head hh_comp) cluster(fips)
-
-cap gen f_hh_employed = F.hh_employed - hh_employed
-ivreghdfe f_hh_employed (D.real_income=D.iv_income_fips) [pw = projection_factor] if movers_f==0, absorb(year hhid kids avg_age_hh_head hh_comp) cluster(fips)
-	
+************* Prep time
 cap gen f_prep_time = F.prep_time - prep_time
 ivreghdfe f_prep_time (D.real_income=D.iv_income_fips) [pw = projection_factor] if movers_f==0, absorb(year hhid kids avg_age_hh_head hh_comp) cluster(fips)
 
 
-
-************* Employment by sex of head (women vs men)
-* Forward diff of each head's employed indicator (missing when that head is absent)
-cap gen f_male_head_employed   = F.male_head_employed   - male_head_employed
-ivreghdfe f_male_head_employed (D.real_income=D.iv_income_fips) [pw = projection_factor] if movers_f==0, absorb(year hhid kids avg_age_hh_head hh_comp) cluster(fips)
-
-cap gen f_female_head_employed = F.female_head_employed - female_head_employed
-ivreghdfe f_female_head_employed (D.real_income=D.iv_income_fips) [pw = projection_factor] if movers_f==0, absorb(year hhid kids avg_age_hh_head hh_comp) cluster(fips)
+************* Labor supply (hours worked, employment, by sex of head)
+* Moved to analyze/labor_supply/4_build_labor_supply_regs.do
 
 *------------------------------------------------------------
 * Compliers

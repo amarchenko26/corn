@@ -18,7 +18,7 @@ clean/     raw → tidy, per source
   usda/      build_usda_wide                               → interim/usda_nielsen_merged/usda_wide.parquet
 build/     analytic panels & variables
   hi/          build_claude_hi · syndigo/(build_hi_panel · add_sodium_to_panel) · usda/(build_hi_usda_panel · export_hi_usda_dta) · full_hei/(build_hei_crosswalk · build_hei_panel)
-  iv/          build_iv · build_county_income_shock · build_bartik_bls_iv · build_bartik_bls_module_iv · build_jaravel_ssiv
+  iv/          build_iv · build_iv_by_head · build_county_income_shock · build_bartik_bls_iv · build_bartik_bls_module_iv · build_jaravel_ssiv
   variety/     build_product_variety · build_module_healthiness · build_module_income_elasticity · build_upc_spending · build_price_index (+ run_*.sh)
   innovation/  build_innovation_reg_data · build_upc_first_year_county (+ run_*.sh)
   expenditure/ build_expenditure_panel · build_trips_panel
@@ -29,6 +29,7 @@ analyze/   regressions & figures
   variety/     analyze_variety_healthiness · analyze_variety_price_index
   innovation/  analyze_innovation_inequality · innovation.do
   monthly_cycle/ build_monthly_cycle_regs.do
+  labor_supply/  1_build_labor_supply_data.do (assembles final/labor_supply_reg_data.dta) · 2_build_head_structure_descriptives.do · 3_build_shock_descriptives.do · 4_build_labor_supply_regs.do
 utils/     food_filters (shared department/group/module drop lists)
 z_archive/ retired: corn/ (separate farm-bill project), explore_coverage.py, fracking.do
 food_deserts_replication/, jaravel_replication/   standalone external replications (left as-is)
@@ -59,7 +60,7 @@ modules (source-independent). Built by `build/hi/build_hi_panel.py` →
 HH/year/kids/age/composition FE, county-clustered SE. UPC harmonization: Nielsen `'0'+zfill(upc,12)`;
 external GTINs harmonize by dropping the check digit (`gtin.zfill(14)[:-1]`).
 
-## Labor-supply subsystem (built in `clean/nielsen/clean_panelist.py`, used in `analyze/hi/build_hi.do`)
+## Labor-supply subsystem (built in `clean/nielsen/clean_panelist.py`, analyzed in `analyze/labor_supply/`)
 
 **Nielsen head/member caveats (shape everything):**
 - No single "household head." Two fixed slots `male_head_*`/`female_head_*`; whether a HH reports **1 or 2
@@ -91,10 +92,15 @@ contaminates head-only analysis.
 not). Full-panel counts (2004–2024): `n_heads` 1→445,531 · 2→757,915 HH-yrs; recovered partners 21,376;
 long panel 1,982,737 rows.
 
-**TODO — head-specific instruments:** `build/iv/build_iv.py` currently assigns one HH income shock via the
-head's occupation (male-preferred). To separate own vs cross-spouse labor response, build
-`iv_income_male`/`iv_income_female` (each from its own head's education×occupation cell) and regress each
-head's employment transition on both in `panelist_heads_long`.
+**Head-specific instruments (built 2026-08-21):** `build/iv/build_iv_by_head.py` builds
+`iv_income_male_fips`/`iv_income_female_fips` — leave-one-county-out cell income from each head's OWN
+education×occupation cell (vs. `build_iv.py`'s male-preferred HH assignment) →
+`interim/panel_dataset/iv_income_by_head.{parquet,dta}`. Spouse-shock corr among couples: 0.52.
+The labor-supply pipeline lives in `analyze/labor_supply/` (1_ data assembly →
+`final/labor_supply_reg_data.dta`; 2_ head-structure descriptives; 3_ shock descriptives; 4_ regressions:
+HH-level 2SLS moved out of build_hi.do, own-vs-spouse reduced forms on couples, income splits,
+opposing-sign shock interactions). Write-up: Overleaf `notes/labor_supply.tex`; outputs in
+`figs/labor_supply/`, `tabs/labor_supply/`.
 
 ## Conventions
 Verb-first dataset-labelled filenames; stage folders (clean/build/analyze); centralize paths; data out of
